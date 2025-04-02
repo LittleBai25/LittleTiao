@@ -1,16 +1,29 @@
 import streamlit as st
-import pandas as pd
 import os
 import tempfile
 import re
 from pathlib import Path
 import json
 import openai
-from PyPDF2 import PdfReader
-import docx
 import io
-from PIL import Image
-import pytesseract
+# 尝试导入额外依赖，如果不可用则跳过
+try:
+    from PyPDF2 import PdfReader
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+
+try:
+    import docx
+    DOCX_SUPPORT = True
+except ImportError:
+    DOCX_SUPPORT = False
+
+try:
+    from PIL import Image
+    IMAGE_SUPPORT = True
+except ImportError:
+    IMAGE_SUPPORT = False
 
 # 页面配置
 st.set_page_config(
@@ -33,23 +46,36 @@ def setup_openai_api(model_type="simplify"):
 def process_file(file_path, file_type):
     """处理不同类型的文件并返回内容"""
     try:
-        if file_type == "docx":
+        if file_type == "docx" and DOCX_SUPPORT:
             doc = docx.Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
         elif file_type == "doc":
             # 简单处理，提示用户doc格式可能不完全支持
             return "注意：.doc格式不完全支持，建议转换为.docx格式。尝试读取内容如下：\n" + open(file_path, 'rb').read().decode('utf-8', errors='ignore')
-        elif file_type == "pdf":
+        elif file_type == "pdf" and PDF_SUPPORT:
             pdf_reader = PdfReader(file_path)
             text = ""
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
             return text
-        elif file_type in ["jpg", "jpeg", "png"]:
+        elif file_type in ["jpg", "jpeg", "png"] and IMAGE_SUPPORT:
+            # 简单记录图像信息，而不进行OCR
             image = Image.open(file_path)
-            return pytesseract.image_to_string(image, lang='chi_sim+eng')
+            width, height = image.size
+            return f"[图像文件，尺寸: {width}x{height}，类型: {image.format}。请在分析时考虑此图像可能包含的视觉内容。]"
+        elif file_type in ["jpg", "jpeg", "png"] and not IMAGE_SUPPORT:
+            return f"[图像文件: {os.path.basename(file_path)}。请在分析时考虑此图像可能包含的视觉内容。]"
         else:
-            return f"不支持的文件类型: {file_type}"
+            # 尝试作为文本文件读取
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except:
+                try:
+                    with open(file_path, 'rb') as f:
+                        return f.read().decode('utf-8', errors='ignore')
+                except:
+                    return f"无法读取文件: {file_type}"
     except Exception as e:
         return f"处理文件时出错: {str(e)}"
 
@@ -287,4 +313,4 @@ with tab2:
 
 # 添加页脚
 st.markdown("---")
-st.markdown("© 2025 脑暴助理 | 由姜瑞米提供支持")
+st.markdown("© 2025 脑暴助理 | 由Streamlit和OpenAI提供支持")
