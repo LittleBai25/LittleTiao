@@ -352,6 +352,10 @@ if 'brainstorm_task_prompt' not in st.session_state:
     st.session_state.brainstorm_task_prompt = "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。"
 if 'brainstorm_output_prompt' not in st.session_state:
     st.session_state.brainstorm_output_prompt = "报告应包括关键发现、创新思路、潜在机会和具体建议，格式清晰易读。"
+langsmith_api_key = st.secrets["LANGCHAIN_API_KEY"]
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
+os.environ["LANGCHAIN_PROJECT"] = "脑暴助理1"
 
 # 创建两个标签页
 tab1, tab2 = st.tabs(["脑暴助理", "管理员设置"])
