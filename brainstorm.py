@@ -233,6 +233,7 @@ with tab1:
                 f.write(file.getbuffer())
             file_paths.append(file_path)
         
+        # 确保立即保存方向信息到会话状态
         st.session_state.uploaded_files = file_paths
         st.session_state.direction = direction
         
@@ -250,6 +251,7 @@ with tab1:
         # 简化内容
         with st.spinner("正在分析素材..."):
             simplified = simplify_content(all_content, direction, st_container=analysis_container)
+            # 确保立即保存简化内容到会话状态
             st.session_state.simplified_content = simplified
         
         # 显示结果
@@ -258,6 +260,10 @@ with tab1:
     
     # 第二步：生成头脑风暴辅助报告
     st.header("第二步：生成头脑风暴辅助报告")
+    
+    # 每次UI渲染时都确保研究方向同步更新
+    if direction and direction != st.session_state.direction:
+        st.session_state.direction = direction
 
     if st.button("生成脑暴报告", disabled=not (st.session_state.simplified_content and st.session_state.direction)):
         # 使用已经生成的简化内容和研究方向
