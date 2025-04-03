@@ -14,6 +14,7 @@ except ImportError:
 
 try:
     import docx
+    import mammoth
     DOCX_SUPPORT = True
 except ImportError:
     DOCX_SUPPORT = False
@@ -25,8 +26,9 @@ except ImportError:
     IMAGE_SUPPORT = False
 
 # 导入 LangChain 相关库
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.streamlit import StreamlitCallbackHandler
@@ -40,7 +42,7 @@ st.set_page_config(
 )
 
 # 设置API客户端
-def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
+def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     """根据不同的模型类型设置API客户端"""
     # 使用OpenRouter API
     api_base = "https://openrouter.ai/api/v1"
@@ -66,18 +68,18 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = CallbackManager([StreamlitCallbackHandler(st_container)])
     
-    # 创建LangChain ChatOpenAI客户端 - 使用最基本的参数
-    chat = ChatOpenAI(
+    # 创建LangChain LLM客户端
+    llm = OpenAI(
         model_name=model_name,
         openai_api_key=api_key,
         openai_api_base=api_base,
         streaming=stream,
         temperature=temperature,
-        max_tokens=4000,  # 直接设置最大token
+        max_tokens=4000,
         callback_manager=callbacks if callbacks else None
     )
     
-    return chat
+    return llm
 
 # 文件处理函数
 def process_file(file_path, file_type):
@@ -89,26 +91,55 @@ def process_file(file_path, file_type):
             
         if file_type == "docx" and DOCX_SUPPORT:
             try:
-                doc = docx.Document(file_path)
-                # 提取段落文本
-                paragraphs_text = [para.text for para in doc.paragraphs if para.text.strip()]
+                # 使用mammoth进行更完整的转换
+                with open(file_path, "rb") as docx_file:
+                    # 设置转换选项，保留表格结构
+                    options = {
+                        "style_map": "table => table"
+                    }
+                    result = mammoth.convert_to_html(docx_file, options=options)
+                    html_content = result.value
+                    
+                    # 记录转换警告
+                    with debug_expander:
+                        if result.messages:
+                            st.write("Mammoth转换警告:", result.messages)
+                        st.write(f"HTML内容预览: {html_content[:200]}..." if len(html_content) > 200 else html_content)
+                    
+                    st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(html_content)} 字符")
+                    return html_content
+            except Exception as e:
+                error_msg = f"读取DOCX文件时出错: {str(e)}"
+                st.error(error_msg)
+                with debug_expander:
+                    st.write(error_msg)
                 
-                # 提取表格文本
-                tables_text = []
-                for table in doc.tables:
-                    for row in table.rows:
-                        row_text = [cell.text for cell in row.cells if cell.text.strip()]
-                        if row_text:
-                            tables_text.append(" | ".join(row_text))
-                
-                # 合并所有文本，先添加段落，然后添加表格内容
-                all_text = paragraphs_text + tables_text
-                content = "\n".join(all_text)
+                # 如果mammoth失败，尝试使用docx库作为备选方案
+                try:
+                    doc = docx.Document(file_path)
+                    content = "\n\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+                    
+                    # 简单处理表格
+                    for table in doc.tables:
+                        table_content = []
+                        for row in table.rows:
+                            row_content = []
+                            for cell in row.cells:
+                                row_content.append(cell.text.strip())
+                            table_content.append(" | ".join(row_content))
+                        content += "\n\n" + "\n".join(table_content)
+                    
+                    st.write(f"从DOCX文件(备选方法)读取了 {len(content)} 字符")
+                    return content
+                except Exception as e2:
+                    error_msg = f"备选方法读取DOCX文件时出错: {str(e2)}"
+                    st.error(error_msg)
+                    return error_msg
                 
                 # 记录日志，便于调试
                 st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
                 with debug_expander:
-                    st.write(f"段落数: {len(paragraphs_text)}, 表格行数: {len(tables_text)}")
+                    st.write(f"段落数: {len(paragraphs_text)}, 表格数: {len(tables_text)}")
                     st.write(f"文档内容预览: {content[:200]}..." if len(content) > 200 else content)
                 return content
             except Exception as e:
@@ -188,7 +219,7 @@ def simplify_content(content, direction, st_container=None):
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
     # 获取API客户端 - 使用带有备用方案的流式输出
-    chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
+    llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
     
     try:
         # 从会话状态获取提示词
@@ -196,8 +227,8 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.material_task_prompt
         output_format = st.session_state.material_output_prompt
         
-        # 构建系统提示 - 使用用户定义的提示词
-        system_prompt = f"""{backstory}
+        # 构建提示模板
+        template = f"""{backstory}
 
 {task}
 
@@ -206,28 +237,29 @@ def simplify_content(content, direction, st_container=None):
 请注意：
 1. 只分析提供的文档内容
 2. 输出必须与研究方向相关
-3. 不要生成与文档无关的内容列表"""
-        
-        # 构建人类消息
-        human_prompt = f"""分析以下文档内容，研究方向是{direction}:
+3. 不要生成与文档无关的内容列表
 
-{content}"""
+分析以下文档内容，研究方向是{{direction}}:
+
+{{content}}"""
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt)
-        ]
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["direction", "content"]
+        )
+        
+        # 创建LLMChain
+        chain = LLMChain(llm=llm, prompt=prompt)
         
         # 记录消息长度
         with debug_expander:
-            st.write(f"系统提示长度: {len(system_prompt)} 字符")
-            st.write(f"人类消息长度: {len(human_prompt)} 字符")
-            st.write(f"总输入长度: {len(system_prompt) + len(human_prompt)} 字符")
+            sample_prompt = prompt.format(direction=direction, content=content[:500] + "..." if len(content) > 500 else content)
+            st.write(f"提示模板长度: {len(template)} 字符")
+            st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
             st.write("开始调用AI分析...")
         
-        # 尝试直接调用
-        response = chat(messages)
-        result = response.content
+        # 执行链
+        result = chain.run(direction=direction, content=content)
         
         # 检查结果
         with debug_expander:
@@ -251,7 +283,7 @@ def simplify_content(content, direction, st_container=None):
 def generate_analysis(simplified_content, direction, st_container=None):
     """使用AI生成分析报告"""
     # 使用流式输出
-    chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
+    llm = get_langchain_llm("analysis", stream=True, st_container=st_container)
     
     try:
         # 检查简化内容是否有效
@@ -263,8 +295,8 @@ def generate_analysis(simplified_content, direction, st_container=None):
         task = st.session_state.brainstorm_task_prompt
         output_format = st.session_state.brainstorm_output_prompt
         
-        # 构建系统提示 - 使用用户定义的提示词
-        system_prompt = f"""{backstory}
+        # 构建提示模板
+        template = f"""{backstory}
 
 {task}
 
@@ -272,29 +304,31 @@ def generate_analysis(simplified_content, direction, st_container=None):
 
 请注意：
 1. 只根据提供的分析结果生成报告
-2. 不要生成与研究方向无关的内容"""
-        
-        # 构建更简洁的人类消息
-        human_prompt = f"""研究方向: {direction}
+2. 不要生成与研究方向无关的内容
+
+研究方向: {{direction}}
 
 分析结果:
-{simplified_content}
+{{simplified_content}}
 
 请生成一份申请策略和提升方案的报告。"""
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt)
-        ]
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["direction", "simplified_content"]
+        )
+        
+        # 创建LLMChain
+        chain = LLMChain(llm=llm, prompt=prompt)
         
         with debug_expander:
             st.write("开始调用AI生成报告...")
-            st.write(f"系统提示长度: {len(system_prompt)} 字符")
-            st.write(f"人类消息长度: {len(human_prompt)} 字符")
+            sample_prompt = prompt.format(direction=direction, simplified_content=simplified_content[:500] + "..." if len(simplified_content) > 500 else simplified_content)
+            st.write(f"提示模板长度: {len(template)} 字符")
+            st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
         
-        # 直接调用API
-        response = chat(messages)
-        result = response.content
+        # 执行链
+        result = chain.run(direction=direction, simplified_content=simplified_content)
         
         with debug_expander:
             st.write(f"AI返回报告长度: {len(result)} 字符")
