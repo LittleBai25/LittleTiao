@@ -234,7 +234,20 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.material_task_prompt
         output_format = st.session_state.material_output_prompt
         
-        # 简化提示模板
+        # 清理文本，移除可能导致问题的特殊字符
+        clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
+        
+        # 如果内容太长，只保留重要部分
+        max_tokens = 8000  # 设置一个合理的上限
+        if len(clean_content) > max_tokens:
+            st.info(f"文档内容较长 ({len(clean_content)} 字符)，将进行截断处理...")
+            # 截取文档的前半部分和后半部分的关键内容
+            first_part = clean_content[:int(max_tokens * 0.7)]  # 前70%
+            last_part = clean_content[-int(max_tokens * 0.3):]  # 后30%
+            clean_content = first_part + "\n\n[...内容过长，已省略中间部分...]\n\n" + last_part
+            st.write(f"截断后的内容长度: {len(clean_content)} 字符")
+        
+        # 增强提示模板，更明确指出这是问卷分析
         template = f"""{backstory}
 
 {task}
@@ -242,28 +255,27 @@ def simplify_content(content, direction, st_container=None):
 {output_format}
 
 注意：
-1. 请认真分析提供的文档内容
-2. 输出需关联研究方向
-3. 提供详细而有意义的分析
+1. 这是一份研究生个人陈述问卷调查，请提取申请者的关键信息和经历
+2. 重点关注与研究方向"{direction}"相关的内容
+3. 注意识别申请者的兴趣、技能、教育背景和研究经历
+4. 输出应为简明扼要的要点，方便后续分析
+5. 提供对申请者优势和潜力的客观评价
 
 研究方向: {direction}
 
 文档内容:
-{content}"""
+{clean_content}"""
         
         prompt = PromptTemplate(
             template=template,
-            input_variables=["direction", "content"]
+            input_variables=["direction", "clean_content"]
         )
         
         # 创建LLMChain
         chain = LLMChain(llm=llm, prompt=prompt)
         
-        # 清理文本，移除可能导致问题的特殊字符
-        clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
-        
-        # 执行链
-        result = chain.run(direction=direction, content=clean_content)
+        # 执行链 - 使用更明确的参数名称
+        result = chain.run(direction=direction, clean_content=clean_content)
         
         # 如果返回内容为空，提供简短的错误信息
         if not result or len(result.strip()) < 10:
