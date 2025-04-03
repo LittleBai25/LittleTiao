@@ -135,29 +135,25 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 创建一个调试变量来追踪API调用状态
-    if 'debug_expander' in locals():
-        with debug_expander:
-            st.write("准备调用API...")
-    
     # 获取API客户端
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        # 简化系统提示，避免过长
-        system_prompt = "你是一个专业的内容分析助手。请根据用户提供的文档和研究方向，提取关键信息并以清晰的要点形式组织内容。不要生成与文档无关的内容或重复模板。"
+        # 从会话状态获取提示词，但使用更简化的版本
+        backstory = "你是一个专业的内容分析助手。"
+        task = "请分析文档中的关键信息，特别关注与用户研究方向相关的部分。"
+        output_format = "以清晰的要点形式组织输出内容，突出关键信息。"
         
-        # 简化人类消息
-        human_prompt = f"""
-研究方向: {direction}
+        # 构建系统提示
+        system_prompt = f"{backstory} {task} {output_format} 避免重复输入提示，只输出分析结果。"
+        
+        # 构建人类消息
+        human_prompt = f"""研究方向: {direction}
 
 文档内容:
----
 {content}
----
 
-请提取与'{direction}'相关的关键信息，不要输出模板或文档中没有的内容。
-"""
+请分析上述内容，提取与研究方向相关的关键信息。"""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -165,28 +161,21 @@ def simplify_content(content, direction, st_container=None):
         ]
         
         # 只在调试模式下记录消息长度
-        if 'debug_expander' in locals():
+        if 'debug_expander' in globals():
             with debug_expander:
                 st.write(f"系统提示长度: {len(system_prompt)} 字符")
                 st.write(f"人类消息长度: {len(human_prompt)} 字符")
                 st.write("开始调用API...")
         
         # 使用try-except捕获任何可能的API错误
-        try:
-            response = chat(messages)
-            result = response.content
+        response = chat(messages)
+        result = response.content
+        
+        # 如果结果为空，返回一个友好的错误消息
+        if not result or len(result.strip()) < 10:
+            return "AI未能生成有效的分析结果。请检查上传的文档内容是否充分，或尝试不同的研究方向描述。"
             
-            # 检查返回结果是否包含输入提示（表示可能有重复）
-            if system_prompt in result or "请基于上述文档内容进行深入分析" in result:
-                result = "API返回了错误的结果，包含了输入提示。请刷新页面重试。"
-                
-            return result
-        except Exception as api_error:
-            if 'debug_expander' in locals():
-                with debug_expander:
-                    st.write(f"API调用错误: {str(api_error)}")
-            return f"API调用出错: {str(api_error)}"
-            
+        return result
     except Exception as e:
         return f"简化内容时出错: {str(e)}"
 
@@ -196,39 +185,35 @@ def generate_analysis(simplified_content, direction, st_container=None):
     chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
-        # 简化系统提示
-        system_prompt = "你是一个专业的头脑风暴报告生成助手。请根据用户提供的素材和研究方向，生成一份包含创新思路、关键发现、潜在机会和具体建议的报告。"
+        # 从会话状态获取提示词，但使用更简化的版本
+        backstory = "你是一个专业的头脑风暴报告生成助手。"
+        task = "根据提供的素材和研究方向，生成一份创新的报告。"
+        output_format = "报告应包括关键发现、创新思路、潜在机会和具体建议。"
         
-        # 简化人类消息
-        human_prompt = f"""
-研究方向: {direction}
+        # 构建系统提示
+        system_prompt = f"{backstory} {task} {output_format} 避免重复输入提示，只输出分析报告。"
+        
+        # 构建人类消息
+        human_prompt = f"""研究方向: {direction}
 
 素材内容:
----
 {simplified_content}
----
 
-请基于上述素材内容生成一份与'{direction}'相关的头脑风暴报告。
-"""
+请基于上述素材内容，生成一份关于"{direction}"的头脑风暴报告，包含创新见解和具体建议。"""
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
-        # 防止API错误或重复输出
-        try:
-            response = chat(messages)
-            result = response.content
+        response = chat(messages)
+        result = response.content
+        
+        # 如果结果为空，返回一个友好的错误消息
+        if not result or len(result.strip()) < 10:
+            return "AI未能生成有效的报告。请尝试提供更多素材内容或修改研究方向描述。"
             
-            # 检查是否有重复的提示词在输出中
-            if system_prompt in result or "请基于上述素材内容生成" in result:
-                result = "API返回了错误的结果，包含了输入提示。请刷新页面重试。"
-                
-            return result
-        except Exception as api_error:
-            return f"API调用出错: {str(api_error)}"
-            
+        return result
     except Exception as e:
         return f"生成分析报告时出错: {str(e)}"
 
