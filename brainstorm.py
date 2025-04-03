@@ -67,18 +67,39 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = CallbackManager([StreamlitCallbackHandler(st_container)])
     
-    # 创建LangChain LLM客户端
-    llm = OpenAI(
-        model_name=model_name,
-        openai_api_key=api_key,
-        openai_api_base=api_base,
-        streaming=stream,
-        temperature=temperature,
-        max_tokens=4000,
-        callback_manager=callbacks if callbacks else None
-    )
-    
-    return llm
+    try:
+        # 创建LangChain LLM客户端 - 为OpenRouter添加额外配置
+        from langchain.llms import OpenAI
+        
+        # 特别针对OpenRouter的headers设置
+        headers = {
+            "HTTP-Referer": "https://streamlit-app.example.com",  # 可以是任何值，但需要提供
+            "X-Title": "脑暴助理"  # 应用名称
+        }
+        
+        llm = OpenAI(
+            model_name=model_name,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
+            streaming=stream,
+            temperature=temperature,
+            max_tokens=4000,
+            callback_manager=callbacks if callbacks else None,
+            headers=headers,  # 添加OpenRouter所需的headers
+            model_kwargs={
+                "route": "fallback"  # 如果首选模型不可用，回退到可用模型
+            }
+        )
+        
+        with debug_expander:
+            st.write(f"成功创建LLM客户端，模型: {model_name}")
+        
+        return llm
+    except Exception as e:
+        st.error(f"创建API客户端时出错: {str(e)}")
+        with debug_expander:
+            st.write(f"错误详情: {str(e)}")
+        st.stop()
 
 # 文件处理函数
 def process_file(file_path, file_type):
@@ -282,8 +303,12 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 获取API客户端 - 使用带有备用方案的流式输出
-    llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+    # 安全处理特殊字符，避免API处理问题
+    content = clean_content_for_api(content)
+    
+    with debug_expander:
+        st.write(f"清理后的内容长度: {len(content)} 字符")
+        st.write(f"内容前500字符预览: {content[:500]}...")
     
     try:
         # 从会话状态获取提示词
@@ -291,7 +316,7 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.material_task_prompt
         output_format = st.session_state.material_output_prompt
         
-        # 增强提示模板的明确性
+        # 构建增强的提示模板
         template = f"""{backstory}
 
 {task}
@@ -303,50 +328,205 @@ def simplify_content(content, direction, st_container=None):
 2. 输出必须与研究方向"{direction}"直接相关
 3. 必须提供深入的分析而非表面的总结
 4. 不要生成与文档无关的内容
-5. 如果文档中包含表格数据，请特别分析其中的关系和意义
 
 研究方向: {{direction}}
 
 文档内容:
-{{content}}
-
-请提供详细分析和见解，突出最重要的发现。"""
+{{content}}"""
         
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=["direction", "content"]
-        )
+        # 检查内容长度是否过长，如果过长则分段处理
+        MAX_CONTENT_LENGTH = 12000  # 设置最大处理长度
         
-        # 创建LLMChain
-        chain = LLMChain(llm=llm, prompt=prompt)
+        if len(content) > MAX_CONTENT_LENGTH:
+            with debug_expander:
+                st.write(f"内容过长 ({len(content)} 字符)，将分段处理")
+            
+            # 执行分段处理的方法
+            return process_long_content(template, content, direction, MAX_CONTENT_LENGTH)
         
-        # 记录消息长度
-        with debug_expander:
-            sample_prompt = prompt.format(direction=direction, content=content[:500] + "..." if len(content) > 500 else content)
-            st.write(f"提示模板长度: {len(template)} 字符")
-            st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
-            st.write("开始调用AI分析...")
-        
-        # 执行链
-        result = chain.run(direction=direction, content=content)
-        
-        # 检查结果
-        with debug_expander:
-            st.write(f"AI返回结果长度: {len(result)} 字符")
-            if len(result) < 100:
-                st.error("警告: AI返回内容异常短!")
-                st.write(f"完整返回内容: '{result}'")
-        
-        # 如果返回内容为空或过短，提供更明确的错误信息
-        if not result or len(result.strip()) < 100:
-            return "AI分析未能生成足够深入的结果。这可能是因为：1)文档内容与研究方向不匹配 2)文档格式难以解析 3)API限制。请调整研究方向或检查文档内容后重试。"
-        
-        return result
+        # 内容长度合适，进行常规处理
+        return process_normal_content(template, content, direction, st_container)
+            
     except Exception as e:
         with debug_expander:
             st.error(f"分析过程中发生错误: {str(e)}")
+            import traceback
+            st.write(f"错误堆栈: {traceback.format_exc()}")
         
         return f"分析过程中发生错误: {str(e)}"
+
+def clean_content_for_api(content):
+    """清理内容中可能导致API处理问题的特殊字符和格式"""
+    # 替换或删除特殊格式标记
+    content = content.replace('{.mark}', '')
+    content = content.replace('{.underline}', '')
+    
+    # 删除可能导致解析问题的控制字符
+    import re
+    content = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', content)
+    
+    # 处理超长段落，添加适当的换行
+    lines = content.split('\n')
+    processed_lines = []
+    
+    for line in lines:
+        if len(line) > 300:  # 如果单行超过300字符
+            # 尝试在标点符号处断句
+            chunks = re.split(r'([.。!！?？;；])', line)
+            new_line = ''
+            for i in range(0, len(chunks), 2):
+                if i+1 < len(chunks):
+                    new_line += chunks[i] + chunks[i+1] + '\n'
+                else:
+                    new_line += chunks[i]
+            processed_lines.append(new_line)
+        else:
+            processed_lines.append(line)
+    
+    return '\n'.join(processed_lines)
+
+def process_normal_content(template, content, direction, st_container=None):
+    """处理正常长度的内容"""
+    # 获取API客户端 - 使用带有备用方案的流式输出
+    llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+    
+    # 创建提示模板
+    from langchain.prompts import PromptTemplate
+    prompt = PromptTemplate(
+        template=template,
+        input_variables=["direction", "content"]
+    )
+    
+    # 创建LLMChain
+    from langchain.chains import LLMChain
+    chain = LLMChain(llm=llm, prompt=prompt)
+    
+    # 记录消息长度
+    with debug_expander:
+        sample_prompt = prompt.format(direction=direction, content=content[:500] + "..." if len(content) > 500 else content)
+        st.write(f"提示模板长度: {len(template)} 字符")
+        st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
+        st.write("开始调用AI分析...")
+    
+    # 添加重试机制
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            # 执行链
+            result = chain.run(direction=direction, content=content)
+            
+            # 检查结果
+            with debug_expander:
+                st.write(f"AI返回结果长度: {len(result)} 字符")
+                if len(result) < 100:
+                    st.error(f"警告: AI返回内容异常短! 长度: {len(result)}")
+                    st.write(f"完整返回内容: '{result}'")
+            
+            # 如果返回内容为空或过短，提供更明确的错误信息
+            if not result or len(result.strip()) < 100:
+                retry_count += 1
+                with debug_expander:
+                    st.write(f"尝试重试 (第 {retry_count}/{max_retries} 次)")
+                if retry_count >= max_retries:
+                    return "AI分析未能生成足够深入的结果。这可能是因为：1)文档内容与研究方向不匹配 2)文档格式难以解析 3)API限制。请调整研究方向或检查文档内容后重试。"
+                # 短暂延迟后重试
+                import time
+                time.sleep(2)
+                continue
+            
+            return result
+        except Exception as e:
+            retry_count += 1
+            with debug_expander:
+                st.error(f"调用API出错 (第 {retry_count}/{max_retries} 次尝试): {str(e)}")
+            
+            if retry_count >= max_retries:
+                return f"分析过程中发生错误，已尝试 {max_retries} 次: {str(e)}"
+            # 短暂延迟后重试
+            import time
+            time.sleep(2)
+
+def process_long_content(template, content, direction, max_length):
+    """处理超长内容，分段进行处理并合并结果"""
+    # 将内容分段
+    segments = []
+    current_segment = ""
+    
+    # 按段落分割
+    paragraphs = content.split('\n\n')
+    
+    for para in paragraphs:
+        if len(current_segment) + len(para) + 2 <= max_length:
+            current_segment += para + "\n\n"
+        else:
+            segments.append(current_segment)
+            current_segment = para + "\n\n"
+    
+    # 添加最后一段
+    if current_segment:
+        segments.append(current_segment)
+    
+    with debug_expander:
+        st.write(f"内容已分为 {len(segments)} 段进行处理")
+    
+    # 处理每一段并收集结果
+    all_results = []
+    
+    for i, segment in enumerate(segments):
+        with debug_expander:
+            st.write(f"处理第 {i+1}/{len(segments)} 段，长度: {len(segment)} 字符")
+        
+        # 创建针对分段的特殊提示
+        segment_template = template + f"\n\n注意：这是文档的第 {i+1}/{len(segments)} 部分，请专注于这部分内容的分析。"
+        
+        # 处理该段内容
+        segment_result = process_normal_content(segment_template, segment, direction)
+        
+        # 收集结果
+        if segment_result and len(segment_result.strip()) > 100:
+            all_results.append(segment_result)
+    
+    # 合并结果
+    if not all_results:
+        return "无法从文档中提取有效内容。请检查文档内容或更改研究方向后重试。"
+    
+    # 如果有多段结果，需要再次处理进行整合
+    if len(all_results) > 1:
+        combined_result = "\n\n".join(all_results)
+        
+        with debug_expander:
+            st.write(f"所有分段处理完成，需要整合 {len(all_results)} 段结果，总长度: {len(combined_result)} 字符")
+        
+        # 如果合并后不是太长，则进行整合处理
+        if len(combined_result) < max_length:
+            integration_template = f"""以下是一份文档分段分析的结果，请将这些分析整合为一份连贯的分析报告，保留最重要的见解，消除重复内容：
+
+{combined_result}
+
+整合后的分析报告应与研究方向"{direction}"直接相关，并保持清晰的结构。"""
+            
+            # 处理整合
+            llm = get_langchain_llm("simplify", stream=False)
+            
+            from langchain.prompts import PromptTemplate
+            from langchain.chains import LLMChain
+            
+            prompt = PromptTemplate(template=integration_template, input_variables=[])
+            chain = LLMChain(llm=llm, prompt=prompt)
+            
+            try:
+                integrated_result = chain.run({})
+                return integrated_result if integrated_result and len(integrated_result.strip()) > 100 else combined_result
+            except:
+                return combined_result
+        else:
+            # 如果太长，直接返回连接结果
+            return combined_result
+    else:
+        # 只有一段结果，直接返回
+        return all_results[0]
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction, st_container=None):
