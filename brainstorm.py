@@ -139,21 +139,22 @@ def simplify_content(content, direction, st_container=None):
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        # 从会话状态获取提示词，但使用更简化的版本
-        backstory = "你是一个专业的内容分析助手。"
-        task = "请分析文档中的关键信息，特别关注与用户研究方向相关的部分。"
-        output_format = "以清晰的要点形式组织输出内容，突出关键信息。"
-        
         # 构建系统提示
-        system_prompt = f"{backstory} {task} {output_format} 避免重复输入提示，只输出分析结果。"
+        system_prompt = """你是一个专业的内容分析助手。
+        
+你的任务是分析用户提供的文档内容，并根据他们的研究方向提取关键信息。
+        
+请直接输出分析结果，不要重复问题或引用原始文档内容。
+不要再提到"研究方向"或"请分析上述内容"等字样。
+不要输出任何指导性语句如"以下是对文档的分析"。
+只输出你的实际分析和见解。"""
         
         # 构建人类消息
-        human_prompt = f"""研究方向: {direction}
+        human_prompt = f"""我需要针对计算机科学研究方向分析以下文档内容:
 
-文档内容:
 {content}
 
-请分析上述内容，提取与研究方向相关的关键信息。"""
+请提供分析结果。"""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -167,9 +168,36 @@ def simplify_content(content, direction, st_container=None):
                 st.write(f"人类消息长度: {len(human_prompt)} 字符")
                 st.write("开始调用API...")
         
-        # 使用try-except捕获任何可能的API错误
+        # 调用API
         response = chat(messages)
         result = response.content
+        
+        # 清理结果，移除可能的提示重复
+        # 检查是否包含原始文档内容引用
+        if "===== 文件:" in result:
+            # 尝试移除文档引用部分
+            parts = result.split("===== 文件:")
+            if len(parts) > 1:
+                # 寻找有意义的分析部分
+                for part in parts:
+                    if "研究方向" not in part and len(part.strip()) > 50:
+                        result = part.strip()
+                        break
+        
+        # 移除其他可能的提示重复
+        clean_phrases = [
+            "请分析上述内容",
+            "研究方向:",
+            "研究方向是:",
+            "以下是对文档的分析:",
+            "文档内容:",
+            "以下是我的分析:",
+            "提取与研究方向相关的关键信息"
+        ]
+        
+        for phrase in clean_phrases:
+            if result.startswith(phrase):
+                result = result[len(phrase):].strip()
         
         # 如果结果为空，返回一个友好的错误消息
         if not result or len(result.strip()) < 10:
@@ -185,29 +213,48 @@ def generate_analysis(simplified_content, direction, st_container=None):
     chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
-        # 从会话状态获取提示词，但使用更简化的版本
-        backstory = "你是一个专业的头脑风暴报告生成助手。"
-        task = "根据提供的素材和研究方向，生成一份创新的报告。"
-        output_format = "报告应包括关键发现、创新思路、潜在机会和具体建议。"
-        
         # 构建系统提示
-        system_prompt = f"{backstory} {task} {output_format} 避免重复输入提示，只输出分析报告。"
+        system_prompt = """你是一个专业的头脑风暴报告生成助手。
         
-        # 构建人类消息
-        human_prompt = f"""研究方向: {direction}
+你的任务是根据用户提供的素材内容生成一份创新的分析报告。
+        
+你的报告应包括关键发现、创新思路、潜在机会和具体建议。
+        
+直接输出报告内容，不要重复提示词或素材内容。
+不要输出任何指导性语句如"以下是我的报告"。"""
+        
+        # 构建人类消息，简化版本，直接指定研究方向
+        human_prompt = f"""我正在研究计算机科学领域。
+        
+以下是相关素材:
 
-素材内容:
 {simplified_content}
 
-请基于上述素材内容，生成一份关于"{direction}"的头脑风暴报告，包含创新见解和具体建议。"""
+请基于上述素材生成一份头脑风暴报告。"""
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
+        # 调用API
         response = chat(messages)
         result = response.content
+        
+        # 清理结果，移除可能的提示重复
+        clean_phrases = [
+            "研究方向:",
+            "素材内容:",
+            "以下是我的报告:",
+            "以下是我的分析:",
+            "基于上述素材",
+            "头脑风暴报告:",
+            "以下是对"
+        ]
+        
+        for phrase in clean_phrases:
+            if result.startswith(phrase):
+                result = result[len(phrase):].strip()
         
         # 如果结果为空，返回一个友好的错误消息
         if not result or len(result.strip()) < 10:
