@@ -258,6 +258,8 @@ if 'simplified_content' not in st.session_state:
     st.session_state.simplified_content = ""
 if 'analysis_report' not in st.session_state:
     st.session_state.analysis_report = ""
+if 'show_analysis_section' not in st.session_state:
+    st.session_state.show_analysis_section = False
 
 # 素材分析提示词初始化
 if 'material_backstory_prompt' not in st.session_state:
@@ -287,7 +289,7 @@ with tab1:
     st.header("第一步：上传文件和输入研究方向")
     
     uploaded_files = st.file_uploader("上传文件（支持DOC, DOCX, PDF, JPG, PNG）", 
-                                     type=['doc', 'docx', 'pdf', 'jpg', 'jpeg', 'png'], 
+                                     type=['doc', 'docx', 'pdf', 'jpg', 'jpeg', 'png', 'txt'], 
                                      accept_multiple_files=True)
     
     direction = st.text_area("请输入您的研究方向", 
@@ -354,6 +356,7 @@ with tab1:
             
             # 确保立即保存简化内容到会话状态
             st.session_state.simplified_content = simplified
+            st.session_state.show_analysis_section = True
             
             with debug_expander:
                 st.write("AI 简化内容完成")
@@ -364,26 +367,27 @@ with tab1:
         st.markdown(simplified)
     
     # 第二步：生成头脑风暴辅助报告
-    st.header("第二步：生成头脑风暴辅助报告")
-    
-    # 每次UI渲染时都确保研究方向同步更新
-    if direction and direction != st.session_state.direction:
-        st.session_state.direction = direction
+    if st.session_state.show_analysis_section or st.session_state.simplified_content:
+        st.header("第二步：生成头脑风暴辅助报告")
+        
+        # 每次UI渲染时都确保研究方向同步更新
+        if direction and direction != st.session_state.direction:
+            st.session_state.direction = direction
 
-    if st.button("生成脑暴报告", disabled=not (st.session_state.simplified_content and st.session_state.direction)):
-        # 使用已经生成的简化内容和研究方向
-        
-        # 创建一个容器用于流式输出
-        report_container = st.empty()
-        
-        # 生成分析报告
-        with st.spinner("正在生成脑暴报告..."):
-            report = generate_analysis(st.session_state.simplified_content, st.session_state.direction, st_container=report_container)
-            st.session_state.analysis_report = report
-        
-        # 显示结果
-        st.subheader("脑暴报告")
-        st.markdown(report)
+        if st.button("生成脑暴报告", disabled=not (st.session_state.simplified_content and st.session_state.direction)):
+            # 使用已经生成的简化内容和研究方向
+            
+            # 创建一个容器用于流式输出
+            report_container = st.empty()
+            
+            # 生成分析报告
+            with st.spinner("正在生成脑暴报告..."):
+                report = generate_analysis(st.session_state.simplified_content, st.session_state.direction, st_container=report_container)
+                st.session_state.analysis_report = report
+            
+            # 显示结果
+            st.subheader("脑暴报告")
+            st.markdown(report)
 
 # 管理员设置标签页
 with tab2:
