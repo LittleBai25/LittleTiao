@@ -4,7 +4,6 @@ import tempfile
 import re
 from pathlib import Path
 import json
-import openai
 import io
 # 尝试导入额外依赖，如果不可用则跳过
 try:
@@ -25,6 +24,12 @@ try:
 except ImportError:
     IMAGE_SUPPORT = False
 
+# 导入 LangChain 相关库
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
+from langchain.callbacks.manager import CallbackManager
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+
 # 页面配置
 st.set_page_config(
     page_title="脑暴助理",
@@ -33,14 +38,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 设置API密钥
-def setup_openai_api(model_type="simplify"):
-    """根据不同的模型类型设置API密钥"""
+# 设置API客户端
+def get_langchain_chat(model_type="simplify"):
+    """根据不同的模型类型设置API客户端"""
+    # 使用OpenRouter API
+    api_base = "https://openrouter.ai/api/v1"
+    
     if model_type == "simplify":
-        openai.api_key = st.secrets["OPENAI_API_KEY_SIMPLIFY"]
+        # 素材分析使用的API密钥和模型
+        api_key = st.secrets["OPENROUTER_API_KEY_SIMPLIFY"]
+        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
+        temperature = 0.3
+        max_tokens = 2000
     else:  # analysis
-        openai.api_key = st.secrets["OPENAI_API_KEY_ANALYSIS"]
-    return True
+        # 脑暴报告使用的API密钥和模型
+        api_key = st.secrets["OPENROUTER_API_KEY_ANALYSIS"]
+        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
+        temperature = 0.5
+        max_tokens = 3000
+    
+    # 创建LangChain ChatOpenAI客户端
+    chat = ChatOpenAI(
+        model_name=model_name,
+        openai_api_key=api_key,  # LangChain 使用 openai_api_key 参数名，但值可以是OpenRouter的API密钥
+        openai_api_base=api_base,
+        streaming=False,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        headers={"HTTP-Referer": "https://my-app.com"}  # OpenRouter需要
+    )
+    
+    return chat
 
 # 文件处理函数
 def process_file(file_path, file_type):
@@ -82,7 +110,7 @@ def process_file(file_path, file_type):
 # 简化文件内容
 def simplify_content(content, direction):
     """使用AI简化上传的文件内容"""
-    setup_openai_api("simplify")
+    chat = get_langchain_chat("simplify")
     
     try:
         backstory = st.session_state.get('material_backstory_prompt', "你是一个专业的内容分析助手。")
@@ -91,23 +119,20 @@ def simplify_content(content, direction):
         
         system_prompt = f"{backstory}\n\n{task}\n\n{output_format}"
         
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # 使用固定的模型
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"我需要针对以下方向简化这份文档的内容: {direction}\n\n文档内容:\n{content}"}
-            ],
-            temperature=0.3,
-            max_tokens=2000,
-        )
-        return response.choices[0].message['content']
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"我需要针对以下方向简化这份文档的内容: {direction}\n\n文档内容:\n{content}")
+        ]
+        
+        response = chat(messages)
+        return response.content
     except Exception as e:
         return f"简化内容时出错: {str(e)}"
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction):
     """使用AI生成分析报告"""
-    setup_openai_api("analysis")
+    chat = get_langchain_chat("analysis")
     
     try:
         backstory = st.session_state.get('brainstorm_backstory_prompt', "你是一个专业的头脑风暴报告生成助手。")
@@ -116,16 +141,13 @@ def generate_analysis(simplified_content, direction):
         
         system_prompt = f"{backstory}\n\n{task}\n\n{output_format}"
         
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # 使用固定的模型
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"我的研究方向是: {direction}\n\n基于以下简化后的内容，请为我生成一份详细的分析报告:\n{simplified_content}"}
-            ],
-            temperature=0.5,
-            max_tokens=3000,
-        )
-        return response.choices[0].message['content']
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"我的研究方向是: {direction}\n\n基于以下简化后的内容，请为我生成一份详细的分析报告:\n{simplified_content}")
+        ]
+        
+        response = chat(messages)
+        return response.content
     except Exception as e:
         return f"生成分析报告时出错: {str(e)}"
 
@@ -171,7 +193,7 @@ if 'brainstorm_output_prompt' not in st.session_state:
     st.session_state.brainstorm_output_prompt = "报告应包括关键发现、创新思路、潜在机会和具体建议，格式清晰易读。"
 
 # 创建两个标签页
-tab1, tab2 = st.tabs(["脑暴助理", "管理员设置"])
+tab1, tab2, tab3 = st.tabs(["脑暴助理", "管理员设置", "API设置"])
 
 # 用户界面标签页
 with tab1:
@@ -311,6 +333,62 @@ with tab2:
     if st.button("保存提示词设置"):
         save_prompts()
 
+# 新增API设置标签页
+with tab3:
+    st.title("⚙️ API设置")
+    st.markdown("配置OpenRouter API参数")
+    
+    # 添加说明
+    st.info("""
+    在此处配置OpenRouter API参数。您需要为素材分析和脑暴报告分别设置API密钥和模型。
+    可以使用相同的API密钥，但建议为不同任务选择适合的模型。
+    """)
+    
+    # 素材分析API设置
+    st.header("素材分析API设置")
+    
+    if "OPENROUTER_MODEL_SIMPLIFY" not in st.secrets:
+        st.secrets["OPENROUTER_MODEL_SIMPLIFY"] = "anthropic/claude-3-haiku"
+    
+    api_key_simplify = st.text_input(
+        "素材分析API密钥", 
+        value=st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", ""),
+        type="password",
+        help="输入您的OpenRouter API密钥"
+    )
+    
+    model_name_simplify = st.text_input(
+        "素材分析模型名称",
+        value=st.secrets.get("OPENROUTER_MODEL_SIMPLIFY"),
+        help="例如：anthropic/claude-3-haiku, openai/gpt-4-turbo"
+    )
+    
+    # 脑暴报告API设置
+    st.header("脑暴报告API设置")
+    
+    if "OPENROUTER_MODEL_ANALYSIS" not in st.secrets:
+        st.secrets["OPENROUTER_MODEL_ANALYSIS"] = "anthropic/claude-3-sonnet"
+    
+    api_key_analysis = st.text_input(
+        "脑暴报告API密钥", 
+        value=st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", ""),
+        type="password",
+        help="输入您的OpenRouter API密钥"
+    )
+    
+    model_name_analysis = st.text_input(
+        "脑暴报告模型名称",
+        value=st.secrets.get("OPENROUTER_MODEL_ANALYSIS"),
+        help="例如：anthropic/claude-3-sonnet, openai/gpt-4-turbo"
+    )
+    
+    if st.button("保存API设置"):
+        st.secrets["OPENROUTER_API_KEY_SIMPLIFY"] = api_key_simplify
+        st.secrets["OPENROUTER_MODEL_SIMPLIFY"] = model_name_simplify
+        st.secrets["OPENROUTER_API_KEY_ANALYSIS"] = api_key_analysis
+        st.secrets["OPENROUTER_MODEL_ANALYSIS"] = model_name_analysis
+        st.success("API设置已保存!")
+
 # 添加页脚
 st.markdown("---")
-st.markdown("© 2025 脑暴助理 | 由Streamlit和OpenAI提供支持")
+st.markdown("© 2025 脑暴助理 | 由Streamlit、LangChain和OpenRouter提供支持")
