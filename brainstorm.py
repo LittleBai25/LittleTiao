@@ -3,9 +3,9 @@ import os
 import tempfile
 import re
 from pathlib import Path
-import json
 import io
-# 尝试导入额外依赖，如果不可用则跳过
+
+# 导入基本依赖
 try:
     from PyPDF2 import PdfReader
     PDF_SUPPORT = True
@@ -28,8 +28,6 @@ except ImportError:
 from langchain.llms import OpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
-from langchain.callbacks.manager import CallbackManager
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.streamlit import StreamlitCallbackHandler
 
 # 页面配置
@@ -65,9 +63,9 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     # 设置回调处理器
     callbacks = None
     if stream and st_container:
-        callbacks = CallbackManager([StreamlitCallbackHandler(st_container)])
+        callbacks = [StreamlitCallbackHandler(st_container)]
     
-    # 创建LangChain LLM客户端 - 简单配置，移除可能导致错误的参数
+    # 创建LangChain LLM客户端 - 简化配置
     llm = OpenAI(
         model_name=model_name,
         openai_api_key=api_key,
@@ -75,7 +73,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         streaming=stream,
         temperature=temperature,
         max_tokens=4000,
-        callback_manager=callbacks if callbacks else None
+        callbacks=callbacks
     )
     
     return llm
@@ -90,15 +88,20 @@ def process_file(file_path, file_type):
             
         if file_type == "docx" and DOCX_SUPPORT:
             try:
-                # 使用python-docx直接处理
+                # 使用python-docx处理
                 doc = docx.Document(file_path)
                 content_parts = []
                 
                 # 提取段落文本
                 for para in doc.paragraphs:
                     if para.text.strip():
-                        # 简单处理段落格式
-                        para_text = para.text.strip()
+                        # 简单格式处理，提取加粗和其他格式
+                        para_text = ""
+                        for run in para.runs:
+                            if run.bold:
+                                para_text += f"**{run.text}**"
+                            else:
+                                para_text += run.text
                         content_parts.append(para_text)
                 
                 # 提取表格内容
@@ -109,143 +112,112 @@ def process_file(file_path, file_type):
                     # 添加表格标记
                     content_parts.append(f"\n## 表格 {table_idx+1}")
                     
-                    # 处理表格内容
-                    for row_idx, row in enumerate(table.rows):
-                        row_text = []
-                        for cell in row.cells:
-                            cell_text = cell.text.strip()
-                            if cell_text:
-                                # 清理特殊格式标记
-                                cell_text = cell_text.replace('{.mark}', '').replace('{.underline}', '')
-                                row_text.append(cell_text)
-                        if row_text:
-                            content_parts.append(" | ".join(row_text))
+                    # 判断表格类型和结构
+                    is_questionnaire = False
+                    if len(table.rows) > 1 and len(table.rows[0].cells) > 0:
+                        # 检查第一行是否可能是表头
+                        header_row = [cell.text.strip() for cell in table.rows[0].cells]
+                        is_questionnaire = any("问题" in cell or "题" in cell for cell in header_row) or len(header_row) >= 2
+                    
+                    if is_questionnaire:
+                        # 特殊处理问卷表格，按行分组
+                        headers = []
+                        for cell in table.rows[0].cells:
+                            headers.append(cell.text.strip())
+                        
+                        # 处理内容行
+                        for row_idx in range(1, len(table.rows)):
+                            row_content = []
+                            for col_idx, cell in enumerate(table.rows[row_idx].cells):
+                                cell_text = cell.text.strip()
+                                # 如果有表头且内容不为空，关联显示
+                                if cell_text and col_idx < len(headers) and headers[col_idx]:
+                                    row_content.append(f"{headers[col_idx]}: {cell_text}")
+                                elif cell_text:
+                                    row_content.append(cell_text)
+                            
+                            # 只添加非空内容
+                            if row_content:
+                                content_parts.append(" | ".join(row_content))
+                    else:
+                        # 常规表格处理
+                        for row in table.rows:
+                            row_texts = []
+                            for cell in row.cells:
+                                cell_text = cell.text.strip()
+                                if cell_text:
+                                    # 替换可能导致格式问题的字符
+                                    cell_text = cell_text.replace('\n', ' ').replace('|', '/')
+                                    row_texts.append(cell_text)
+                            
+                            # 只添加非空行
+                            if row_texts:
+                                content_parts.append(" | ".join(row_texts))
                 
-                # 合并内容
+                # 合并所有内容
                 content = "\n\n".join(content_parts)
-                
-                # 清理特殊格式标记
-                content = content.replace('{.mark}', '').replace('{.underline}', '')
                 
                 # 记录日志
                 st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
-                
-                # 内容为空时的备用方案
-                if not content or len(content.strip()) < 20:
-                    st.warning(f"警告: 从DOCX文件中提取的内容过短，尝试使用备用方法")
-                    # 尝试使用备用方法提取内容
-                    try:
-                        # 尝试从XML直接读取内容
-                        import zipfile
-                        text_parts = []
-                        
-                        with zipfile.ZipFile(file_path) as z:
-                            for info in z.infolist():
-                                if info.filename.startswith('word/document.xml'):
-                                    content_xml = z.read(info)
-                                    # 使用简单的正则表达式提取文本
-                                    content_text = re.sub(r'<[^>]+>', ' ', content_xml.decode('utf-8', errors='ignore'))
-                                    # 清理多余空白字符
-                                    content_text = re.sub(r'\s+', ' ', content_text).strip()
-                                    text_parts.append(content_text)
-                                    
-                        if text_parts:
-                            backup_content = "\n\n".join(text_parts)
-                            st.write(f"备用方法从DOCX提取了 {len(backup_content)} 字符")
-                            return backup_content
-                    except Exception as e:
-                        st.write(f"备用方法也失败: {str(e)}")
-                        # 最后尝试读取原始内容
-                        try:
-                            with open(file_path, 'rb') as f:
-                                raw_content = f.read().decode('utf-8', errors='ignore')
-                            return f"注意：DOCX格式解析失败，显示原始内容：\n{raw_content}"
-                        except:
-                            return f"无法读取DOCX文件 {os.path.basename(file_path)}。请尝试转换为其他格式。"
+                    
+                # 后处理，清理可能的重复内容和格式标记
+                content = content.replace('{.mark}', '').replace('{.underline}', '')
                 
                 return content
             except Exception as e:
-                st.error(f"读取DOCX文件时出错: {str(e)}")
+                error_msg = f"读取DOCX文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
                 
-                # 出错时尝试备用方法
-                try:
-                    # 直接尝试使用zipfile处理DOCX
-                    import zipfile
-                    text_parts = []
-                    
-                    with zipfile.ZipFile(file_path) as z:
-                        for info in z.infolist():
-                            if info.filename.startswith('word/document.xml'):
-                                content_xml = z.read(info)
-                                # 使用简单的正则表达式提取文本
-                                content_text = re.sub(r'<[^>]+>', ' ', content_xml.decode('utf-8', errors='ignore'))
-                                # 清理多余空白字符
-                                content_text = re.sub(r'\s+', ' ', content_text).strip()
-                                text_parts.append(content_text)
-                                
-                    if text_parts:
-                        backup_content = "\n\n".join(text_parts)
-                        st.write(f"备用方法从DOCX提取了 {len(backup_content)} 字符")
-                        return backup_content
-                    else:
-                        # 如果备用方法也失败，尝试读取原始内容
-                        with open(file_path, 'rb') as f:
-                            raw_content = f.read().decode('utf-8', errors='ignore')
-                        return f"注意：DOCX格式解析失败，显示原始内容：\n{raw_content}"
-                except Exception as e2:
-                    st.error(f"备用方法也失败: {str(e2)}")
-                    return f"读取DOCX文件时出错: {str(e)}, 备用方法也失败: {str(e2)}"
-        
         elif file_type == "pdf" and PDF_SUPPORT:
             try:
                 pdf_reader = PdfReader(file_path)
-                text_parts = []
-                
-                for page_num, page in enumerate(pdf_reader.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(f"=== 第{page_num+1}页 ===\n{page_text}")
-                    else:
-                        text_parts.append(f"=== 第{page_num+1}页 (无文本内容) ===")
-                
-                text = "\n\n".join(text_parts)
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
                 st.write(f"从PDF文件 {os.path.basename(file_path)} 读取了 {len(text)} 字符")
-                
-                # 检查内容是否为空
-                if not text or len(text.strip()) < 50:
-                    return f"PDF文件 {os.path.basename(file_path)} 似乎没有可提取的文本内容。可能是扫描件，需要OCR处理。"
-                
                 return text
             except Exception as e:
-                st.error(f"读取PDF文件时出错: {str(e)}")
-                return f"读取PDF文件时出错: {str(e)}"
-        else:
-            # 尝试多种编码读取文本文件
-            encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030', 'big5', 'latin1']
-            
-            for encoding in encodings:
-                try:
-                    with open(file_path, 'r', encoding=encoding) as f:
-                        content = f.read()
-                        st.write(f"从文本文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符，使用编码: {encoding}")
-                        return content
-                except UnicodeDecodeError:
-                    continue
-                except Exception as e:
-                    st.write(f"使用编码 {encoding} 读取失败: {str(e)}")
-            
-            # 所有编码都失败时，使用二进制模式
+                error_msg = f"读取PDF文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
+        elif file_type in ["jpg", "jpeg", "png"] and IMAGE_SUPPORT:
+            # 简单记录图像信息，而不进行OCR
             try:
-                with open(file_path, 'rb') as f:
-                    content = f.read().decode('utf-8', errors='ignore')
-                    st.write(f"从二进制文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
-                    return content
+                image = Image.open(file_path)
+                width, height = image.size
+                info = f"[图像文件，尺寸: {width}x{height}，类型: {image.format}。请在分析时考虑此图像可能包含的视觉内容。]"
+                st.write(f"处理图像文件: {os.path.basename(file_path)}")
+                return info
             except Exception as e:
-                st.error(f"读取文件时出错: {str(e)}")
-                return f"读取文件时出错: {str(e)}"
+                error_msg = f"处理图像文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
+        else:
+            # 尝试作为文本文件读取
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    st.write(f"从文本文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                    return content
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, 'rb') as f:
+                        content = f.read().decode('utf-8', errors='ignore')
+                        st.write(f"从二进制文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                        return content
+                except Exception as e:
+                    error_msg = f"以二进制模式读取文件时出错: {str(e)}"
+                    st.error(error_msg)
+                    return error_msg
+            except Exception as e:
+                error_msg = f"读取文本文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
     except Exception as e:
-        st.error(f"处理文件时出错: {str(e)}")
-        return f"处理文件时出错: {str(e)}"
+        error_msg = f"处理文件时出错: {str(e)}"
+        st.error(error_msg)
+        return error_msg
 
 # 简化文件内容
 def simplify_content(content, direction, st_container=None):
@@ -253,20 +225,16 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 检查内容是否过短
-    if len(content) < 50:
-        return "文档内容过短，无法进行有效分析。请确保上传了包含足够信息的文件。"
+    # 获取API客户端 - 使用带有备用方案的流式输出
+    llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
     
     try:
-        # 获取API客户端
-        llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
-        
         # 从会话状态获取提示词
         backstory = st.session_state.material_backstory_prompt
         task = st.session_state.material_task_prompt
         output_format = st.session_state.material_output_prompt
         
-        # 提示模板
+        # 简化提示模板
         template = f"""{backstory}
 
 {task}
@@ -277,13 +245,11 @@ def simplify_content(content, direction, st_container=None):
 1. 请认真分析提供的文档内容
 2. 输出需关联研究方向
 3. 提供详细而有意义的分析
-4. 即使文档内容不完整，也请尽量提取有价值信息
-5. 表格中的内容可能是问答形式，请注意理解问题和回答
 
-研究方向: {{direction}}
+研究方向: {direction}
 
 文档内容:
-{{content}}"""
+{content}"""
         
         prompt = PromptTemplate(
             template=template,
@@ -293,78 +259,19 @@ def simplify_content(content, direction, st_container=None):
         # 创建LLMChain
         chain = LLMChain(llm=llm, prompt=prompt)
         
-        # 记录消息长度
-        with debug_expander:
-            sample_prompt = prompt.format(direction=direction, content=content[:500] + "..." if len(content) > 500 else content)
-            st.write(f"提示模板长度: {len(template)} 字符")
-            st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
-            st.write("开始调用AI分析...")
-        
-        # 清理文本
+        # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
         
-        # 如果内容过长，截断处理
-        max_length = 15000
-        if len(clean_content) > max_length:
-            st.warning(f"内容过长，将截断至{max_length}字符")
-            clean_content = clean_content[:max_length] + "\n\n[内容已截断]"
+        # 执行链
+        result = chain.run(direction=direction, content=clean_content)
         
-        # 执行链并添加重试机制
-        try:
-            result = chain.run(direction=direction, content=clean_content)
-        except Exception as e:
-            st.warning(f"首次分析失败: {str(e)}，尝试使用更短的内容重试...")
-            # 如果失败，尝试使用更短的内容
-            shorter_content = clean_content[:8000] + "\n\n[内容已大幅截断]"
-            result = chain.run(direction=direction, content=shorter_content)
-        
-        # 检查结果
-        with debug_expander:
-            st.write(f"AI返回结果长度: {len(result)} 字符")
-            if len(result) < 50:
-                st.error("警告: AI返回内容异常短!")
-                st.write(f"完整返回内容: '{result}'")
-        
-        # 如果返回内容为空，重试一次
-        if not result or len(result.strip()) < 20:
-            st.warning("AI返回内容异常短，尝试重新调用...")
-            try:
-                # 修改提示词，让AI即使在内容不完整的情况下也尽量生成分析
-                new_template = f"""{backstory}
-
-{task}
-
-{output_format}
-
-**重要提示**:
-1. 即使文档格式复杂或信息不完整，也请尽可能进行分析
-2. 提供任何可以从文档中提取的有价值内容
-3. 分析需明确关联研究方向: {{direction}}
-4. 不要放弃分析，即使内容格式异常
-
-研究方向: {{direction}}
-
-文档内容:
-{{content}}"""
-                
-                new_prompt = PromptTemplate(
-                    template=new_template,
-                    input_variables=["direction", "content"]
-                )
-                
-                new_chain = LLMChain(llm=llm, prompt=new_prompt)
-                result = new_chain.run(direction=direction, content=clean_content[:10000])
-                
-                if not result or len(result.strip()) < 20:
-                    return "AI分析未能生成有效结果。请检查文档内容是否相关，或尝试上传更有信息量的文件。"
-            except Exception as retry_e:
-                return f"AI分析失败: {str(retry_e)}。请尝试更换研究方向或上传不同的文件。"
+        # 如果返回内容为空，提供简短的错误信息
+        if not result or len(result.strip()) < 10:
+            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         return result
     except Exception as e:
-        with debug_expander:
-            st.error(f"分析过程中发生错误: {str(e)}")
-        
+        st.error(f"分析过程中发生错误: {str(e)}")
         return f"分析过程中发生错误: {str(e)}"
 
 # 生成分析报告
@@ -397,10 +304,10 @@ def generate_analysis(simplified_content, direction, st_container=None):
 4. 包含清晰的结构和小标题
 5. 内容必须具备原创性和创新性
 
-研究方向: {{direction}}
+研究方向: {direction}
 
 分析结果:
-{{simplified_content}}
+{simplified_content}
 
 请生成一份全面的申请策略和提升方案报告，确保包含明确的小标题和结构化内容。"""
         
@@ -412,66 +319,16 @@ def generate_analysis(simplified_content, direction, st_container=None):
         # 创建LLMChain
         chain = LLMChain(llm=llm, prompt=prompt)
         
-        with debug_expander:
-            st.write("开始调用AI生成报告...")
-            sample_prompt = prompt.format(direction=direction, simplified_content=simplified_content[:500] + "..." if len(simplified_content) > 500 else simplified_content)
-            st.write(f"提示模板长度: {len(template)} 字符")
-            st.write(f"格式化后提示长度估算: {len(sample_prompt)} 字符")
+        # 执行链
+        result = chain.run(direction=direction, simplified_content=simplified_content)
         
-        # 执行链并添加重试机制
-        try:
-            result = chain.run(direction=direction, simplified_content=simplified_content)
-        except Exception as e:
-            st.warning(f"首次生成报告失败: {str(e)}，尝试使用更短的内容重试...")
-            # 如果失败，尝试使用更短的内容
-            shorter_content = simplified_content[:8000] + "\n\n[内容已大幅截断]"
-            result = chain.run(direction=direction, simplified_content=shorter_content)
-        
-        with debug_expander:
-            st.write(f"AI返回报告长度: {len(result)} 字符")
-        
-        # 如果返回为空或过短，提供更明确的错误信息并重试
+        # 如果返回为空或过短，提供更明确的错误信息
         if not result or len(result.strip()) < 200:
-            st.warning("AI返回内容异常短，尝试重新调用...")
-            try:
-                # 修改提示词进行最后一次尝试
-                new_template = f"""{backstory}
-
-{task}
-
-{output_format}
-
-**特别重要**:
-1. 即使分析内容不够全面，也请基于现有信息生成报告
-2. 报告必须与研究方向"{direction}"相关
-3. 提供尽可能具体的建议和方案
-4. 确保报告有结构，包含小标题
-
-研究方向: {{direction}}
-
-分析结果:
-{{simplified_content}}
-
-请生成一份申请策略和提升方案报告，确保内容有价值可用。"""
-                
-                new_prompt = PromptTemplate(
-                    template=new_template,
-                    input_variables=["direction", "simplified_content"]
-                )
-                
-                new_chain = LLMChain(llm=llm, prompt=new_prompt)
-                result = new_chain.run(direction=direction, simplified_content=simplified_content[:10000])
-                
-                if not result or len(result.strip()) < 200:
-                    return "生成报告失败。AI未能生成有意义的内容，可能是因为分析内容不够详细或研究方向过于模糊。请调整提示词设置或返回上一步提供更充分的信息。"
-            except Exception as retry_e:
-                return f"生成报告失败: {str(retry_e)}。请尝试更换研究方向或上传不同的文件。"
+            return "生成报告失败。AI未能生成有意义的内容，可能是因为分析内容不够详细或研究方向过于模糊。请调整提示词设置或返回上一步提供更充分的信息。"
         
         return result
     except Exception as e:
-        with debug_expander:
-            st.error(f"生成报告时出错: {str(e)}")
-        
+        st.error(f"生成报告时出错: {str(e)}")
         return f"生成报告时出错: {str(e)}"
 
 # 保存提示词函数
@@ -517,14 +374,6 @@ if 'brainstorm_task_prompt' not in st.session_state:
 if 'brainstorm_output_prompt' not in st.session_state:
     st.session_state.brainstorm_output_prompt = "报告应包括关键发现、创新思路、潜在机会和具体建议，格式清晰易读。"
 
-try:
-    langsmith_api_key = st.secrets["LANGCHAIN_API_KEY"]
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
-    os.environ["LANGCHAIN_PROJECT"] = "脑暴助理"
-except Exception as e:
-    st.write(f"LangSmith API设置错误: {str(e)}，但不影响程序运行")
-
 # 创建两个标签页
 tab1, tab2 = st.tabs(["脑暴助理", "管理员设置"])
 
@@ -544,17 +393,7 @@ with tab1:
                              height=100, 
                              help="详细描述您的研究方向，帮助AI更好地理解您的需求")
     
-    # 创建一个折叠面板用于显示调试信息
-    debug_expander = st.expander("文件处理调试信息", expanded=False)
-    
     if st.button("开始素材分析", disabled=not uploaded_files or not direction):
-        with debug_expander:
-            st.write(f"处理 {len(uploaded_files)} 个上传文件")
-            st.write("===== 调试模式开启 =====")
-            for file in uploaded_files:
-                st.write(f"文件名: {file.name}, 大小: {len(file.getbuffer())} 字节, 类型: {file.type}")
-            st.write("========================")
-        
         # 保存上传的文件到临时目录
         temp_dir = tempfile.mkdtemp()
         file_paths = []
@@ -567,8 +406,7 @@ with tab1:
             with open(file_path, "wb") as f:
                 f.write(file.getbuffer())
             file_paths.append(file_path)
-            with debug_expander:
-                st.write(f"保存文件: {file.name} -> {file_path}, 大小: {len(file.getbuffer())} 字节")
+            st.write(f"保存文件: {file.name} -> {file_path}, 大小: {len(file.getbuffer())} 字节")
         
         # 确保立即保存方向信息到会话状态
         st.session_state.uploaded_files = file_paths
@@ -579,62 +417,28 @@ with tab1:
         for file_path in file_paths:
             file_ext = Path(file_path).suffix.lower().replace(".", "")
             
-            with debug_expander:
-                st.write(f"处理文件: {os.path.basename(file_path)}, 类型: {file_ext}")
-                st.write(f"文件路径: {file_path}")
-                st.write(f"文件大小: {os.path.getsize(file_path)} 字节")
-            
             # 使用process_file函数提取文件内容，并添加到all_content
             content = process_file(file_path, file_ext)
             file_name = os.path.basename(file_path)
             
-            # 检查提取的内容
-            with debug_expander:
-                st.write(f"提取到内容长度: {len(content)} 字符")
-                if len(content) < 100:
-                    st.warning(f"警告: 从{file_name}提取的内容非常短，可能没有正确读取")
-                    st.write(f"完整内容: {content}")
-            
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
             
-        # 在debug中显示完整的内容长度
-        with debug_expander:
-            st.write(f"所有文件合并后的内容长度: {len(all_content)}")
-            st.write("内容前1000字符预览:")
-            st.text(all_content[:1000] + "..." if len(all_content) > 1000 else all_content)
-        
         # 验证文件内容不为空
         if not all_content or len(all_content.strip()) < 50:
             st.error("❌ 文件内容似乎为空或过短。请确保上传了有效的文件。")
-            with debug_expander:
-                st.write("文件内容为空或过短")
-                st.write(f"内容长度: {len(all_content)} 字符")
-                st.write(f"内容预览: {all_content[:100]}...")
             st.stop()
-        
-        with debug_expander:
-            st.write(f"处理完成，总内容长度: {len(all_content)} 字符")
-            st.write("内容预览:")
-            st.text(all_content[:500] + "..." if len(all_content) > 500 else all_content)
         
         # 创建一个容器用于流式输出
         analysis_container = st.empty()
         
         # 简化内容
         with st.spinner("正在分析素材..."):
-            with debug_expander:
-                st.write("开始调用 AI 简化内容...")
-            
             # 调用AI分析内容
             simplified = simplify_content(all_content, direction, st_container=analysis_container)
             
             # 确保立即保存简化内容到会话状态
             st.session_state.simplified_content = simplified
             st.session_state.show_analysis_section = True
-            
-            with debug_expander:
-                st.write("AI 简化内容完成")
-                st.write(f"简化内容长度: {len(simplified)} 字符")
         
         # 显示结果
         st.subheader("素材分析结果")
