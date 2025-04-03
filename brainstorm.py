@@ -73,7 +73,6 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
         openai_api_base=api_base,
         streaming=stream,
         temperature=temperature,
-        max_tokens=max_tokens,
         callback_manager=callbacks if callbacks else None
     )
     
