@@ -91,15 +91,21 @@ def process_file(file_path, file_type):
             
         if file_type == "docx" and DOCX_SUPPORT:
             doc = docx.Document(file_path)
-            return "\n".join([para.text for para in doc.paragraphs])
+            content = "\n".join([para.text for para in doc.paragraphs])
+            # 记录日志，便于调试
+            st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+            return content
         elif file_type == "doc":
             # 简单处理，提示用户doc格式可能不完全支持
-            return "注意：.doc格式不完全支持，建议转换为.docx格式。尝试读取内容如下：\n" + open(file_path, 'rb').read().decode('utf-8', errors='ignore')
+            raw_content = open(file_path, 'rb').read().decode('utf-8', errors='ignore')
+            st.write(f"从DOC文件 {os.path.basename(file_path)} 读取了 {len(raw_content)} 字符")
+            return "注意：.doc格式不完全支持，建议转换为.docx格式。尝试读取内容如下：\n" + raw_content
         elif file_type == "pdf" and PDF_SUPPORT:
             pdf_reader = PdfReader(file_path)
             text = ""
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
+            st.write(f"从PDF文件 {os.path.basename(file_path)} 读取了 {len(text)} 字符")
             return text
         elif file_type in ["jpg", "jpeg", "png"] and IMAGE_SUPPORT:
             # 简单记录图像信息，而不进行OCR
@@ -112,11 +118,15 @@ def process_file(file_path, file_type):
             # 尝试作为文本文件读取
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                    content = f.read()
+                    st.write(f"从文本文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                    return content
             except:
                 try:
                     with open(file_path, 'rb') as f:
-                        return f.read().decode('utf-8', errors='ignore')
+                        content = f.read().decode('utf-8', errors='ignore')
+                        st.write(f"从二进制文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                        return content
                 except:
                     return f"无法读取文件: {file_type}"
     except Exception as e:
@@ -125,6 +135,9 @@ def process_file(file_path, file_type):
 # 简化文件内容
 def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
+    # 记录日志，确认内容长度
+    st.write(f"准备分析的内容总长度: {len(content)} 字符")
+    
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
@@ -132,25 +145,42 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.get('material_task_prompt', "请根据用户的方向，提取并分析文档中的关键信息。")
         output_format = st.session_state.get('material_output_prompt', "以清晰的要点形式组织输出内容。")
         
-        # 修改：增强系统提示，确保模型不会输出重复内容
-        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}\n\n重要：分析应基于用户提供的文档内容。不要输出重复内容或固定模板。"
+        # 增强系统提示，避免输出固定模板
+        system_prompt = f"""
+{backstory}
+
+{task}
+
+{output_format}
+
+重要说明：
+1. 你必须严格分析用户提供的原始文档内容，不要生成与文档无关的内容
+2. 不要输出任何模板化或重复的内容，如"请描述您对计算机科学专业产生兴趣的契机"
+3. 如果文档内容与"留学"或"申请"相关，不要自动生成申请模板或问题列表
+4. 你的分析必须100%基于用户提供的文件内容，避免猜测或假设
+"""
         
-        # 修改：在人类消息中强调分析原始内容
+        # 强化人类消息，确保模型理解任务
         human_prompt = f"""
-我需要针对以下方向简化这份文档的内容: {direction}
+我需要针对以下研究方向简化文档内容: {direction}
 
-请仔细分析以下文档内容，提取与研究方向相关的关键信息：
+以下是完整的文档内容，请仔细阅读并提取关键信息：
 
-文档内容:
+---文档开始---
 {content}
+---文档结束---
 
-请提供基于以上内容的深入分析，不要输出任何与上述文档无关的内容。
+请基于上述文档内容进行深入分析，不要输出任何与文档无关的内容，尤其不要输出重复的模板化问题。
 """
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
+        
+        # 记录发送给AI的消息长度
+        st.write(f"发送给AI的系统提示长度: {len(system_prompt)} 字符")
+        st.write(f"发送给AI的人类消息长度: {len(human_prompt)} 字符")
         
         response = chat(messages)
         return response.content
@@ -167,17 +197,31 @@ def generate_analysis(simplified_content, direction, st_container=None):
         task = st.session_state.get('brainstorm_task_prompt', "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。")
         output_format = st.session_state.get('brainstorm_output_prompt', "报告应包括关键发现、创新思路、潜在机会和具体建议。")
         
-        # 修改：增强系统提示
-        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}\n\n重要：报告应基于用户提供的素材分析内容。不要输出重复内容或固定模板。"
+        # 增强系统提示
+        system_prompt = f"""
+{backstory}
+
+{task}
+
+{output_format}
+
+重要说明：
+1. 你的报告必须基于用户提供的素材分析内容，不要生成与素材无关的内容
+2. 不要输出任何模板化或重复的内容
+3. 请确保报告的内容与用户的研究方向相关并基于素材分析结果
+"""
         
-        # 修改：强调基于简化内容生成报告
+        # 强化人类消息
         human_prompt = f"""
 我的研究方向是: {direction}
 
-基于以下简化后的内容，请为我生成一份详细的分析报告:
-{simplified_content}
+以下是简化后的素材内容，请基于这些内容生成详细的分析报告:
 
-请确保报告内容直接基于以上分析内容，不要输出与之无关的固定模板。
+---素材开始---
+{simplified_content}
+---素材结束---
+
+请基于上述素材内容生成有深度的头脑风暴报告，不要输出任何与上述素材无关的内容。
 """
         
         messages = [
@@ -251,6 +295,12 @@ with tab1:
                              help="详细描述您的研究方向，帮助AI更好地理解您的需求")
     
     if st.button("开始素材分析", disabled=not uploaded_files or not direction):
+        # 创建一个折叠面板用于显示调试信息
+        debug_expander = st.expander("文件处理调试信息", expanded=False)
+        
+        with debug_expander:
+            st.write(f"处理 {len(uploaded_files)} 个上传文件")
+        
         # 保存上传的文件到临时目录
         temp_dir = tempfile.mkdtemp()
         file_paths = []
@@ -260,6 +310,8 @@ with tab1:
             with open(file_path, "wb") as f:
                 f.write(file.getbuffer())
             file_paths.append(file_path)
+            with debug_expander:
+                st.write(f"保存文件: {file.name}, 大小: {len(file.getbuffer())} 字节")
         
         # 确保立即保存方向信息到会话状态
         st.session_state.uploaded_files = file_paths
@@ -269,23 +321,43 @@ with tab1:
         all_content = ""
         for file_path in file_paths:
             file_ext = Path(file_path).suffix.lower().replace(".", "")
+            with debug_expander:
+                st.write(f"处理文件: {os.path.basename(file_path)}, 类型: {file_ext}")
+            
             content = process_file(file_path, file_ext)
             file_name = os.path.basename(file_path)
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
         
-        # 修改：验证文件内容
+        # 验证文件内容
         if not all_content or len(all_content.strip()) < 50:
             st.error("❌ 文件内容似乎为空或过短。请确保上传了有效的文件。")
+            with debug_expander:
+                st.write("文件内容为空或过短")
+                st.write(f"内容长度: {len(all_content)} 字符")
+                st.write(f"内容预览: {all_content[:100]}...")
             st.stop()
+        
+        with debug_expander:
+            st.write(f"处理完成，总内容长度: {len(all_content)} 字符")
+            st.write("内容预览:")
+            st.text(all_content[:500] + "..." if len(all_content) > 500 else all_content)
         
         # 创建一个容器用于流式输出
         analysis_container = st.empty()
         
         # 简化内容
         with st.spinner("正在分析素材..."):
+            with debug_expander:
+                st.write("开始调用 AI 简化内容...")
+            
             simplified = simplify_content(all_content, direction, st_container=analysis_container)
+            
             # 确保立即保存简化内容到会话状态
             st.session_state.simplified_content = simplified
+            
+            with debug_expander:
+                st.write("AI 简化内容完成")
+                st.write(f"简化内容长度: {len(simplified)} 字符")
         
         # 显示结果
         st.subheader("素材分析结果")
