@@ -47,23 +47,19 @@ def get_langchain_chat(model_type="simplify"):
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        # 优先使用会话状态中的模型设置
-        model_name = st.session_state.get("OPENROUTER_MODEL_SIMPLIFY", 
-                     st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku"))
+        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "deepseek/deepseek-v3-base:free")
         temperature = 0.3
         max_tokens = 2000
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        # 优先使用会话状态中的模型设置
-        model_name = st.session_state.get("OPENROUTER_MODEL_ANALYSIS", 
-                     st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet"))
-        temperature = 0.5
+        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "deepseek/deepseek-v3-base:free")
+        temperature = 0.3
         max_tokens = 3000
         
     # 检查API密钥是否为空
     if not api_key:
-        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在API设置选项卡中配置。")
+        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
         st.stop()
     
     # 创建LangChain ChatOpenAI客户端
@@ -202,7 +198,7 @@ if 'brainstorm_output_prompt' not in st.session_state:
     st.session_state.brainstorm_output_prompt = "报告应包括关键发现、创新思路、潜在机会和具体建议，格式清晰易读。"
 
 # 创建两个标签页
-tab1, tab2, tab3 = st.tabs(["脑暴助理", "管理员设置", "API设置"])
+tab1, tab2 = st.tabs(["脑暴助理", "管理员设置"])
 
 # 用户界面标签页
 with tab1:
@@ -342,73 +338,7 @@ with tab2:
     if st.button("保存提示词设置"):
         save_prompts()
 
-# 新增API设置标签页
-with tab3:
-    st.title("⚙️ API设置")
-    st.markdown("配置OpenRouter API参数")
-    
-    # 添加说明
-    st.info("""
-    在此处配置OpenRouter API参数。您需要为素材分析和脑暴报告分别设置API密钥和模型。
-    可以使用相同的API密钥，但建议为不同任务选择适合的模型。
-    """)
-    
-    # 素材分析API设置
-    st.header("素材分析API设置")
-    
-    # 使用会话状态存储模型名称
-    if "OPENROUTER_MODEL_SIMPLIFY" not in st.session_state:
-        st.session_state.OPENROUTER_MODEL_SIMPLIFY = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
-    
-    api_key_simplify = st.text_input(
-        "素材分析API密钥", 
-        value=st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", ""),
-        type="password",
-        help="输入您的OpenRouter API密钥"
-    )
-    
-    model_name_simplify = st.text_input(
-        "素材分析模型名称",
-        value=st.session_state.OPENROUTER_MODEL_SIMPLIFY,
-        help="例如：anthropic/claude-3-haiku, openai/gpt-4-turbo"
-    )
-    
-    # 脑暴报告API设置
-    st.header("脑暴报告API设置")
-    
-    # 使用会话状态存储模型名称
-    if "OPENROUTER_MODEL_ANALYSIS" not in st.session_state:
-        st.session_state.OPENROUTER_MODEL_ANALYSIS = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
-    
-    api_key_analysis = st.text_input(
-        "脑暴报告API密钥", 
-        value=st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", ""),
-        type="password",
-        help="输入您的OpenRouter API密钥"
-    )
-    
-    model_name_analysis = st.text_input(
-        "脑暴报告模型名称",
-        value=st.session_state.OPENROUTER_MODEL_ANALYSIS,
-        help="例如：anthropic/claude-3-sonnet, openai/gpt-4-turbo"
-    )
-    
-    if st.button("保存API设置"):
-        # 把API设置保存到会话状态
-        st.session_state.OPENROUTER_MODEL_SIMPLIFY = model_name_simplify
-        st.session_state.OPENROUTER_MODEL_ANALYSIS = model_name_analysis
-        
-        # 提示用户需要手动更新secrets.toml文件
-        st.success("""API设置已暂时保存到会话状态！
-
-要永久保存这些设置，请在Streamlit应用的secrets.toml文件中添加以下内容：
-```
-OPENROUTER_API_KEY_SIMPLIFY = "您的素材分析API密钥"
-OPENROUTER_MODEL_SIMPLIFY = "{}"
-OPENROUTER_API_KEY_ANALYSIS = "您的脑暴报告API密钥"
-OPENROUTER_MODEL_ANALYSIS = "{}"
-```
-""".format(model_name_simplify, model_name_analysis))
+# API设置标签页已移除
 
 # 添加页脚
 st.markdown("---")
