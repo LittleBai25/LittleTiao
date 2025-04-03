@@ -135,102 +135,89 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 获取API客户端
-    chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
+    # 获取API客户端 - 禁用流式输出以获得完整响应
+    chat = get_langchain_chat("simplify", stream=False, st_container=st_container)
     
     try:
+        # 检查文件内容长度是否太短
+        if len(content.strip()) < 100:
+            return f"文档内容太短，无法进行有效分析。请确保上传文件内容充足。\n\n当前内容：\n{content}"
+            
         # 构建系统提示
-        system_prompt = """你是一个专业的内容分析助手。
+        system_prompt = """你是一位数据分析专家。请分析用户提供的文档内容，提取关键信息并给出见解。
         
-你的任务是分析用户提供的文档内容，并根据他们的研究方向提取关键信息。
+重要说明：
+1. 你必须客观分析文档实际内容，不要生成文档中不存在的信息
+2. 如果文档不包含足够的信息，请诚实地说明这一点
+3. 直接开始你的分析，不要重复用户的指令
+4. 不要在回复中包含"文档内容"、"研究方向"等提示短语
+5. 如果文档与研究方向无关，请诚实地指出这一点"""
         
-请直接输出分析结果，不要重复问题或引用原始文档内容。
-不要再提到"研究方向"或"请分析上述内容"等字样。
-不要输出任何指导性语句如"以下是对文档的分析"。
-只输出你的实际分析和见解。"""
-        
-        # 构建人类消息
-        human_prompt = f"""我需要针对计算机科学研究方向分析以下文档内容:
+        # 构建人类消息 - 提供研究方向作为背景信息
+        human_prompt = f"""以下是我需要分析的文档内容，研究方向是{direction}：
 
+<<<开始>>>
 {content}
+<<<结束>>>
 
-请提供分析结果。"""
+请分析这份文档的实际内容并提供见解。"""
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
-        # 只在调试模式下记录消息长度
-        if 'debug_expander' in globals():
-            with debug_expander:
-                st.write(f"系统提示长度: {len(system_prompt)} 字符")
-                st.write(f"人类消息长度: {len(human_prompt)} 字符")
-                st.write("开始调用API...")
-        
         # 调用API
         response = chat(messages)
+        
+        # 获取结果
         result = response.content
         
-        # 清理结果，移除可能的提示重复
-        # 检查是否包含原始文档内容引用
-        if "===== 文件:" in result:
-            # 尝试移除文档引用部分
-            parts = result.split("===== 文件:")
-            if len(parts) > 1:
-                # 寻找有意义的分析部分
-                for part in parts:
-                    if "研究方向" not in part and len(part.strip()) > 50:
-                        result = part.strip()
-                        break
-        
-        # 移除其他可能的提示重复
-        clean_phrases = [
-            "请分析上述内容",
-            "研究方向:",
-            "研究方向是:",
-            "以下是对文档的分析:",
-            "文档内容:",
-            "以下是我的分析:",
-            "提取与研究方向相关的关键信息"
-        ]
-        
-        for phrase in clean_phrases:
-            if result.startswith(phrase):
-                result = result[len(phrase):].strip()
-        
-        # 如果结果为空，返回一个友好的错误消息
-        if not result or len(result.strip()) < 10:
-            return "AI未能生成有效的分析结果。请检查上传的文档内容是否充分，或尝试不同的研究方向描述。"
-            
+        # 添加验证逻辑来确保AI真的分析了内容
+        if "我无法" in result or "无法提供" in result or "没有足够信息" in result:
+            result += "\n\n文档内容可能不足。请上传更详细的文档，我们会根据实际内容进行分析。"
+                
         return result
     except Exception as e:
-        return f"简化内容时出错: {str(e)}"
+        return f"分析文档内容时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction, st_container=None):
     """使用AI生成分析报告"""
-    chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
+    # 使用非流式模式以获得完整响应
+    chat = get_langchain_chat("analysis", stream=False, st_container=st_container)
     
     try:
-        # 构建系统提示
-        system_prompt = """你是一个专业的头脑风暴报告生成助手。
+        # 检查简化内容是否有效
+        if not simplified_content or "分析文档内容时出错" in simplified_content:
+            return "无法生成报告，因为文档分析阶段出现错误。请返回上一步重试。"
+            
+        # 构建系统提示，更加直接明确
+        system_prompt = """你是一位专业的创新咨询顾问。
         
-你的任务是根据用户提供的素材内容生成一份创新的分析报告。
+请你仔细阅读用户提供的分析材料，并生成一份创新的头脑风暴报告。
         
-你的报告应包括关键发现、创新思路、潜在机会和具体建议。
+报告必须包括：
+1. 对材料的关键见解
+2. 创新思路和潜在机会
+3. 具体的行动建议
         
-直接输出报告内容，不要重复提示词或素材内容。
-不要输出任何指导性语句如"以下是我的报告"。"""
+注意事项：
+- 你的报告必须基于用户提供的实际材料
+- 如果材料中缺乏关键信息，请诚实指出
+- 不要在回复中包含"研究方向"、"素材内容"等提示性短语
+- 直接开始你的报告，不需要标题或前言"""
         
-        # 构建人类消息，简化版本，直接指定研究方向
-        human_prompt = f"""我正在研究计算机科学领域。
+        # 构建人类消息，让AI专注于已提供的内容
+        human_prompt = f"""我的研究方向是{direction}。
         
-以下是相关素材:
+以下是第一阶段的分析材料：
 
+<<<开始>>>
 {simplified_content}
+<<<结束>>>
 
-请基于上述素材生成一份头脑风暴报告。"""
+请基于这些实际材料生成头脑风暴报告。"""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -241,28 +228,13 @@ def generate_analysis(simplified_content, direction, st_container=None):
         response = chat(messages)
         result = response.content
         
-        # 清理结果，移除可能的提示重复
-        clean_phrases = [
-            "研究方向:",
-            "素材内容:",
-            "以下是我的报告:",
-            "以下是我的分析:",
-            "基于上述素材",
-            "头脑风暴报告:",
-            "以下是对"
-        ]
-        
-        for phrase in clean_phrases:
-            if result.startswith(phrase):
-                result = result[len(phrase):].strip()
-        
-        # 如果结果为空，返回一个友好的错误消息
-        if not result or len(result.strip()) < 10:
-            return "AI未能生成有效的报告。请尝试提供更多素材内容或修改研究方向描述。"
+        # 添加验证逻辑
+        if "我无法" in result or "无法提供" in result or "缺乏足够" in result:
+            result += "\n\n提示：请确保上传的文档包含足够丰富的内容，以便生成有价值的报告。"
             
         return result
     except Exception as e:
-        return f"生成分析报告时出错: {str(e)}"
+        return f"生成报告时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
 
 # 保存提示词函数
 def save_prompts():
