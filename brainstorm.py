@@ -87,11 +87,35 @@ def process_file(file_path, file_type):
             return f"警告: 文件 {os.path.basename(file_path)} 为空或不存在"
             
         if file_type == "docx" and DOCX_SUPPORT:
-            doc = docx.Document(file_path)
-            content = "\n".join([para.text for para in doc.paragraphs])
-            # 记录日志，便于调试
-            st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
-            return content
+            try:
+                doc = docx.Document(file_path)
+                # 提取段落文本
+                paragraphs_text = [para.text for para in doc.paragraphs if para.text.strip()]
+                
+                # 提取表格文本
+                tables_text = []
+                for table in doc.tables:
+                    for row in table.rows:
+                        row_text = [cell.text for cell in row.cells if cell.text.strip()]
+                        if row_text:
+                            tables_text.append(" | ".join(row_text))
+                
+                # 合并所有文本，先添加段落，然后添加表格内容
+                all_text = paragraphs_text + tables_text
+                content = "\n".join(all_text)
+                
+                # 记录日志，便于调试
+                st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                with debug_expander:
+                    st.write(f"段落数: {len(paragraphs_text)}, 表格行数: {len(tables_text)}")
+                    st.write(f"文档内容预览: {content[:200]}..." if len(content) > 200 else content)
+                return content
+            except Exception as e:
+                error_msg = f"读取DOCX文件时出错: {str(e)}"
+                st.error(error_msg)
+                with debug_expander:
+                    st.write(error_msg)
+                return error_msg
         elif file_type == "doc":
             # 简单处理，提示用户doc格式可能不完全支持
             raw_content = open(file_path, 'rb').read().decode('utf-8', errors='ignore')
@@ -285,11 +309,15 @@ with tab1:
                              help="详细描述您的研究方向，帮助AI更好地理解您的需求")
     
     # 创建一个折叠面板用于显示调试信息
-    debug_expander = st.expander("文件处理调试信息", expanded=False)
+    debug_expander = st.expander("文件处理调试信息", expanded=True)
     
     if st.button("开始素材分析", disabled=not uploaded_files or not direction):
         with debug_expander:
             st.write(f"处理 {len(uploaded_files)} 个上传文件")
+            st.write("===== 调试模式开启 =====")
+            for file in uploaded_files:
+                st.write(f"文件名: {file.name}, 大小: {len(file.getbuffer())} 字节, 类型: {file.type}")
+            st.write("========================")
         
         # 保存上传的文件到临时目录
         temp_dir = tempfile.mkdtemp()
@@ -315,11 +343,27 @@ with tab1:
             
             with debug_expander:
                 st.write(f"处理文件: {os.path.basename(file_path)}, 类型: {file_ext}")
+                st.write(f"文件路径: {file_path}")
+                st.write(f"文件大小: {os.path.getsize(file_path)} 字节")
             
             # 使用process_file函数提取文件内容，并添加到all_content
             content = process_file(file_path, file_ext)
             file_name = os.path.basename(file_path)
+            
+            # 检查提取的内容
+            with debug_expander:
+                st.write(f"提取到内容长度: {len(content)}")
+                if len(content) < 100:
+                    st.warning(f"警告: 从{file_name}提取的内容非常短，可能没有正确读取")
+                    st.write(f"完整内容: {content}")
+            
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
+            
+        # 在debug中显示完整的内容长度
+        with debug_expander:
+            st.write(f"所有文件合并后的内容长度: {len(all_content)}")
+            st.write("内容前1000字符预览:")
+            st.text(all_content[:1000] + "..." if len(all_content) > 1000 else all_content)
         
         # 验证文件内容不为空
         if not all_content or len(all_content.strip()) < 50:
