@@ -135,39 +135,28 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
+    # 创建一个调试变量来追踪API调用状态
+    if 'debug_expander' in locals():
+        with debug_expander:
+            st.write("准备调用API...")
+    
+    # 获取API客户端
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        backstory = st.session_state.get('material_backstory_prompt', "你是一个专业的内容分析助手。")
-        task = st.session_state.get('material_task_prompt', "请根据用户的方向，提取并分析文档中的关键信息。")
-        output_format = st.session_state.get('material_output_prompt', "以清晰的要点形式组织输出内容。")
+        # 简化系统提示，避免过长
+        system_prompt = "你是一个专业的内容分析助手。请根据用户提供的文档和研究方向，提取关键信息并以清晰的要点形式组织内容。不要生成与文档无关的内容或重复模板。"
         
-        # 增强系统提示，避免输出固定模板
-        system_prompt = f"""
-{backstory}
-
-{task}
-
-{output_format}
-
-重要说明：
-1. 你必须严格分析用户提供的原始文档内容，不要生成与文档无关的内容
-2. 不要输出任何模板化或重复的内容，如"请描述您对计算机科学专业产生兴趣的契机"
-3. 如果文档内容与"留学"或"申请"相关，不要自动生成申请模板或问题列表
-4. 你的分析必须100%基于用户提供的文件内容，避免猜测或假设
-"""
-        
-        # 强化人类消息，确保模型理解任务
+        # 简化人类消息
         human_prompt = f"""
-我需要针对以下研究方向简化文档内容: {direction}
+研究方向: {direction}
 
-以下是完整的文档内容，请仔细阅读并提取关键信息：
-
----文档开始---
+文档内容:
+---
 {content}
----文档结束---
+---
 
-请基于上述文档内容进行深入分析，不要输出任何与文档无关的内容，尤其不要输出重复的模板化问题。
+请提取与'{direction}'相关的关键信息，不要输出模板或文档中没有的内容。
 """
         
         messages = [
@@ -175,12 +164,29 @@ def simplify_content(content, direction, st_container=None):
             HumanMessage(content=human_prompt)
         ]
         
-        # 记录发送给AI的消息长度
-        st.write(f"发送给AI的系统提示长度: {len(system_prompt)} 字符")
-        st.write(f"发送给AI的人类消息长度: {len(human_prompt)} 字符")
+        # 只在调试模式下记录消息长度
+        if 'debug_expander' in locals():
+            with debug_expander:
+                st.write(f"系统提示长度: {len(system_prompt)} 字符")
+                st.write(f"人类消息长度: {len(human_prompt)} 字符")
+                st.write("开始调用API...")
         
-        response = chat(messages)
-        return response.content
+        # 使用try-except捕获任何可能的API错误
+        try:
+            response = chat(messages)
+            result = response.content
+            
+            # 检查返回结果是否包含输入提示（表示可能有重复）
+            if system_prompt in result or "请基于上述文档内容进行深入分析" in result:
+                result = "API返回了错误的结果，包含了输入提示。请刷新页面重试。"
+                
+            return result
+        except Exception as api_error:
+            if 'debug_expander' in locals():
+                with debug_expander:
+                    st.write(f"API调用错误: {str(api_error)}")
+            return f"API调用出错: {str(api_error)}"
+            
     except Exception as e:
         return f"简化内容时出错: {str(e)}"
 
@@ -190,35 +196,19 @@ def generate_analysis(simplified_content, direction, st_container=None):
     chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
-        backstory = st.session_state.get('brainstorm_backstory_prompt', "你是一个专业的头脑风暴报告生成助手。")
-        task = st.session_state.get('brainstorm_task_prompt', "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。")
-        output_format = st.session_state.get('brainstorm_output_prompt', "报告应包括关键发现、创新思路、潜在机会和具体建议。")
+        # 简化系统提示
+        system_prompt = "你是一个专业的头脑风暴报告生成助手。请根据用户提供的素材和研究方向，生成一份包含创新思路、关键发现、潜在机会和具体建议的报告。"
         
-        # 增强系统提示
-        system_prompt = f"""
-{backstory}
-
-{task}
-
-{output_format}
-
-重要说明：
-1. 你的报告必须基于用户提供的素材分析内容，不要生成与素材无关的内容
-2. 不要输出任何模板化或重复的内容
-3. 请确保报告的内容与用户的研究方向相关并基于素材分析结果
-"""
-        
-        # 强化人类消息
+        # 简化人类消息
         human_prompt = f"""
-我的研究方向是: {direction}
+研究方向: {direction}
 
-以下是简化后的素材内容，请基于这些内容生成详细的分析报告:
-
----素材开始---
+素材内容:
+---
 {simplified_content}
----素材结束---
+---
 
-请基于上述素材内容生成有深度的头脑风暴报告，不要输出任何与上述素材无关的内容。
+请基于上述素材内容生成一份与'{direction}'相关的头脑风暴报告。
 """
         
         messages = [
@@ -226,8 +216,19 @@ def generate_analysis(simplified_content, direction, st_container=None):
             HumanMessage(content=human_prompt)
         ]
         
-        response = chat(messages)
-        return response.content
+        # 防止API错误或重复输出
+        try:
+            response = chat(messages)
+            result = response.content
+            
+            # 检查是否有重复的提示词在输出中
+            if system_prompt in result or "请基于上述素材内容生成" in result:
+                result = "API返回了错误的结果，包含了输入提示。请刷新页面重试。"
+                
+            return result
+        except Exception as api_error:
+            return f"API调用出错: {str(api_error)}"
+            
     except Exception as e:
         return f"生成分析报告时出错: {str(e)}"
 
@@ -293,10 +294,10 @@ with tab1:
                              height=100, 
                              help="详细描述您的研究方向，帮助AI更好地理解您的需求")
     
+    # 创建一个折叠面板用于显示调试信息
+    debug_expander = st.expander("文件处理调试信息", expanded=False)
+    
     if st.button("开始素材分析", disabled=not uploaded_files or not direction):
-        # 创建一个折叠面板用于显示调试信息
-        debug_expander = st.expander("文件处理调试信息", expanded=False)
-        
         with debug_expander:
             st.write(f"处理 {len(uploaded_files)} 个上传文件")
         
