@@ -62,6 +62,18 @@ def get_langchain_chat(model_type="simplify"):
         st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
         st.stop()
     
+    # 创建LangChain ChatOpenAI客户端，不使用headers参数
+    chat = ChatOpenAI(
+        model_name=model_name,
+        openai_api_key=api_key,
+        openai_api_base=api_base,
+        streaming=False,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+    
+    return chat
+    
     # 创建LangChain ChatOpenAI客户端
     chat = ChatOpenAI(
         model_name=model_name,
