@@ -119,23 +119,42 @@ def process_file(file_path, file_type):
                 return error_msg
         elif file_type == "doc":
             # 简单处理，提示用户doc格式可能不完全支持
-            raw_content = open(file_path, 'rb').read().decode('utf-8', errors='ignore')
-            st.write(f"从DOC文件 {os.path.basename(file_path)} 读取了 {len(raw_content)} 字符")
-            return "注意：.doc格式不完全支持，建议转换为.docx格式。尝试读取内容如下：\n" + raw_content
+            try:
+                raw_content = open(file_path, 'rb').read().decode('utf-8', errors='ignore')
+                st.write(f"从DOC文件 {os.path.basename(file_path)} 读取了 {len(raw_content)} 字符")
+                return "注意：.doc格式不完全支持，建议转换为.docx格式。尝试读取内容如下：\n" + raw_content
+            except Exception as e:
+                error_msg = f"读取DOC文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
         elif file_type == "pdf" and PDF_SUPPORT:
-            pdf_reader = PdfReader(file_path)
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-            st.write(f"从PDF文件 {os.path.basename(file_path)} 读取了 {len(text)} 字符")
-            return text
+            try:
+                pdf_reader = PdfReader(file_path)
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
+                st.write(f"从PDF文件 {os.path.basename(file_path)} 读取了 {len(text)} 字符")
+                return text
+            except Exception as e:
+                error_msg = f"读取PDF文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
         elif file_type in ["jpg", "jpeg", "png"] and IMAGE_SUPPORT:
             # 简单记录图像信息，而不进行OCR
-            image = Image.open(file_path)
-            width, height = image.size
-            return f"[图像文件，尺寸: {width}x{height}，类型: {image.format}。请在分析时考虑此图像可能包含的视觉内容。]"
+            try:
+                image = Image.open(file_path)
+                width, height = image.size
+                info = f"[图像文件，尺寸: {width}x{height}，类型: {image.format}。请在分析时考虑此图像可能包含的视觉内容。]"
+                st.write(f"处理图像文件: {os.path.basename(file_path)}")
+                return info
+            except Exception as e:
+                error_msg = f"处理图像文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
         elif file_type in ["jpg", "jpeg", "png"] and not IMAGE_SUPPORT:
-            return f"[图像文件: {os.path.basename(file_path)}。请在分析时考虑此图像可能包含的视觉内容。]"
+            info = f"[图像文件: {os.path.basename(file_path)}。请在分析时考虑此图像可能包含的视觉内容。]"
+            st.write(info)
+            return info
         else:
             # 尝试作为文本文件读取
             try:
@@ -143,16 +162,24 @@ def process_file(file_path, file_type):
                     content = f.read()
                     st.write(f"从文本文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
                     return content
-            except:
+            except UnicodeDecodeError:
                 try:
                     with open(file_path, 'rb') as f:
                         content = f.read().decode('utf-8', errors='ignore')
                         st.write(f"从二进制文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
                         return content
-                except:
-                    return f"无法读取文件: {file_type}"
+                except Exception as e:
+                    error_msg = f"以二进制模式读取文件时出错: {str(e)}"
+                    st.error(error_msg)
+                    return error_msg
+            except Exception as e:
+                error_msg = f"读取文本文件时出错: {str(e)}"
+                st.error(error_msg)
+                return error_msg
     except Exception as e:
-        return f"处理文件时出错: {str(e)}"
+        error_msg = f"处理文件时出错: {str(e)}"
+        st.error(error_msg)
+        return error_msg
 
 # 简化文件内容
 def simplify_content(content, direction, st_container=None):
@@ -164,16 +191,24 @@ def simplify_content(content, direction, st_container=None):
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        # 构建简单明确的系统提示
-        system_prompt = """你是一位文档分析专家。请分析用户提供的文档内容，提取关键信息。
-
-要求：
-1. 直接输出分析结果
-2. 不要重复原始文档内容
-3. 不要包含"以下是我的分析"等引导语
-4. 如果文档与用户研究方向无关，请说明"""
+        # 从会话状态获取提示词
+        backstory = st.session_state.material_backstory_prompt
+        task = st.session_state.material_task_prompt
+        output_format = st.session_state.material_output_prompt
         
-        # 构建简洁的人类消息 - 使用更简单的格式
+        # 构建系统提示 - 使用用户定义的提示词
+        system_prompt = f"""{backstory}
+
+{task}
+
+{output_format}
+
+请注意：
+1. 只分析提供的文档内容
+2. 输出必须与研究方向相关
+3. 不要生成与文档无关的内容列表"""
+        
+        # 构建人类消息
         human_prompt = f"""分析以下文档内容，研究方向是{direction}:
 
 {content}"""
@@ -200,52 +235,17 @@ def simplify_content(content, direction, st_container=None):
             if len(result) < 10:
                 st.error("警告: AI返回内容异常短!")
                 st.write(f"完整返回内容: '{result}'")
-                st.write("将提供备用分析结果...")
         
-        # 如果返回内容为空，提供一个备用消息
+        # 如果返回内容为空，提供简短的错误信息
         if not result or len(result.strip()) < 10:
-            result = f"""## 文档分析结果
-
-该文档是一份"个人陈述调查问卷"，用于收集申请{direction}专业硕士的信息。
-
-### 主要内容
-
-文档包含了以下主要部分：
-1. 基本信息（姓名、申请专业方向、心仪院校）
-2. 申请动机（为何选择该专业）
-3. 专业衔接（当前专业与申请专业的关系）
-4. 院校选择理由（为何选择特定国家和学校）
-5. 教育背景与研究经历
-6. 实践经历与工作经验
-7. 未来学习目标和职业规划
-
-### 关键发现
-
-该问卷提供了申请{direction}专业的完整框架，涵盖了个人陈述所需的所有关键要素。问卷设计引导申请者深入思考专业选择动机、学术准备情况、研究经历和未来规划，这些都是成功申请的关键因素。
-
-### 建议
-
-申请者应详细完成问卷，特别注重：
-- 阐明选择{direction}专业的个人经历和动机
-- 展示与{direction}相关的学术背景和研究经验
-- 针对不同院校定制申请材料
-- 清晰描述短期学习目标和长期职业规划"""
+            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         return result
     except Exception as e:
         with debug_expander:
             st.error(f"分析过程中发生错误: {str(e)}")
         
-        # 返回备用分析作为最终手段
-        return f"""## 文档分析 (发生错误时的备用分析)
-
-该文档是一份"个人陈述调查问卷"，用于收集申请{direction}专业的信息。
-
-主要内容包括申请者基本信息、专业选择原因、学术背景、研究经历和职业规划等方面。
-
-建议申请者详细完成问卷，突出与{direction}相关的经历和能力。
-
-错误信息: {str(e)}"""
+        return f"分析过程中发生错误: {str(e)}"
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction, st_container=None):
@@ -258,9 +258,21 @@ def generate_analysis(simplified_content, direction, st_container=None):
         if not simplified_content or len(simplified_content.strip()) < 10:
             return "无法生成报告，因为文档分析阶段未能产生有效内容。请返回上一步重试。"
             
-        # 构建系统提示，更加简洁
-        system_prompt = """你是一位专业顾问。根据用户提供的内容生成详细分析报告。
-包括关键发现、建议和行动计划。直接开始内容，无需引导语。"""
+        # 从会话状态获取提示词
+        backstory = st.session_state.brainstorm_backstory_prompt
+        task = st.session_state.brainstorm_task_prompt
+        output_format = st.session_state.brainstorm_output_prompt
+        
+        # 构建系统提示 - 使用用户定义的提示词
+        system_prompt = f"""{backstory}
+
+{task}
+
+{output_format}
+
+请注意：
+1. 只根据提供的分析结果生成报告
+2. 不要生成与研究方向无关的内容"""
         
         # 构建更简洁的人类消息
         human_prompt = f"""研究方向: {direction}
@@ -287,91 +299,16 @@ def generate_analysis(simplified_content, direction, st_container=None):
         with debug_expander:
             st.write(f"AI返回报告长度: {len(result)} 字符")
         
-        # 如果返回为空，提供备用报告
+        # 如果返回为空，提供简短错误信息
         if not result or len(result.strip()) < 50:
-            with debug_expander:
-                st.error("AI返回内容异常短，使用备用报告")
-            
-            result = f"""# {direction} 专业申请头脑风暴报告
-
-## 申请策略概述
-
-基于问卷内容，以下是申请 {direction} 专业的关键策略：
-
-### 个人陈述优化要点
-
-1. **突出专业选择动机**
-   - 清晰阐述为何选择 {direction} 专业的个人经历和兴趣发展
-   - 将初始兴趣点（如Scratch编程体验）与后续发展连接起来
-   - 展示对该领域的持续热情和好奇心
-
-2. **强化学术背景描述**
-   - 详细说明本科期间所学核心课程与硕士申请方向的关联
-   - 强调计算机科学基础知识如何为专业深造打下基础
-   - 突出任何与 {direction} 相关的特殊课程或项目经验
-
-3. **研究经历呈现**
-   - 系统性描述研究项目，包括背景、方法和成果
-   - 明确个人在团队项目中的具体贡献和角色
-   - 将研究经历与未来研究兴趣建立逻辑连接
-
-## 提升申请竞争力的建议
-
-1. **针对不同院校定制申请材料**
-   - 根据每所学校的特色和强项调整个人陈述重点
-   - 展示对目标院校特定研究方向或教授的了解
-   - 说明为何该校是你的理想选择
-
-2. **完善个人经历叙述**
-   - 将实习和项目经历与申请专业紧密结合
-   - 用具体例子和数据支持你的能力陈述
-   - 展示解决问题的能力和创新思维
-
-3. **明确未来规划**
-   - 制定清晰的短期学习目标和长期职业发展路径
-   - 说明硕士学位如何帮助实现这些目标
-   - 展示你对行业发展趋势的了解和洞察
-
-## 后续行动建议
-
-1. 完整填写问卷中的所有部分，特别关注研究经历和专业规划
-2. 收集并组织相关的项目作品集或研究成果
-3. 联系目标院校的教授或校友，了解更多项目细节
-4. 准备针对不同院校的个性化申请材料
-
-祝你申请成功！"""
+            return "生成报告失败。请检查分析内容是否有效，或调整提示词设置。"
         
         return result
     except Exception as e:
         with debug_expander:
             st.error(f"生成报告时出错: {str(e)}")
         
-        # 返回备用报告
-        return f"""# {direction} 专业申请报告 (错误时的备用报告)
-
-## 申请策略概述
-
-根据文档分析，这是一份研究生申请的个人陈述调查问卷，针对 {direction} 专业申请提供了框架性指导。
-
-### 关键建议
-
-1. **个人陈述准备**
-   - 详细阐述选择该专业的动机和相关经历
-   - 展示你的学术背景如何与申请专业衔接
-   - 说明为何选择特定国家和院校
-
-2. **突出优势领域**
-   - 强调与 {direction} 相关的研究和项目经验
-   - 展示技术能力和解决问题的能力
-   - 清晰描述未来学习目标和职业规划
-
-## 后续步骤
-
-1. 完整填写调查问卷，确保涵盖所有关键部分
-2. 针对不同院校定制申请材料
-3. 在提交前寻求专业人士审阅
-
-错误信息: {str(e)}"""
+        return f"生成报告时出错: {str(e)}"
 
 # 保存提示词函数
 def save_prompts():
@@ -452,12 +389,14 @@ with tab1:
         
         # 保存文件并添加到处理列表
         for file in uploaded_files:
-            file_path = os.path.join(temp_dir, file.name)
+            # 使用安全的文件名，移除特殊字符
+            safe_filename = re.sub(r'[^\w\-\.]', '_', file.name)
+            file_path = os.path.join(temp_dir, safe_filename)
             with open(file_path, "wb") as f:
                 f.write(file.getbuffer())
             file_paths.append(file_path)
             with debug_expander:
-                st.write(f"保存文件: {file.name}, 大小: {len(file.getbuffer())} 字节")
+                st.write(f"保存文件: {file.name} -> {file_path}, 大小: {len(file.getbuffer())} 字节")
         
         # 确保立即保存方向信息到会话状态
         st.session_state.uploaded_files = file_paths
