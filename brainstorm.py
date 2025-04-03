@@ -29,6 +29,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.callbacks.streamlit import StreamlitCallbackHandler
 
 # 页面配置
 st.set_page_config(
@@ -39,7 +40,7 @@ st.set_page_config(
 )
 
 # 设置API客户端
-def get_langchain_chat(model_type="simplify"):
+def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
     """根据不同的模型类型设置API客户端"""
     # 使用OpenRouter API
     api_base = "https://openrouter.ai/api/v1"
@@ -62,41 +63,20 @@ def get_langchain_chat(model_type="simplify"):
         st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
         st.stop()
     
+    # 设置回调处理器
+    callbacks = None
+    if stream and st_container:
+        callbacks = CallbackManager([StreamlitCallbackHandler(st_container)])
+    
     # 创建LangChain ChatOpenAI客户端，不使用headers参数
     chat = ChatOpenAI(
         model_name=model_name,
         openai_api_key=api_key,
         openai_api_base=api_base,
-        streaming=False,
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
-    
-    return chat
-    
-    # 创建LangChain ChatOpenAI客户端
-    chat = ChatOpenAI(
-        model_name=model_name,
-        openai_api_key=api_key,
-        openai_api_base=api_base,
-        streaming=False,
+        streaming=stream,
         temperature=temperature,
         max_tokens=max_tokens,
-        # OpenRouter需要HTTP-Referer头，但要通过OpenAI类的额外配置传递
-        model_kwargs={"headers": {"HTTP-Referer": "https://my-app.com"}}
-    )
-    
-    return chat
-    
-    # 创建LangChain ChatOpenAI客户端
-    chat = ChatOpenAI(
-        model_name=model_name,
-        openai_api_key=api_key,  # LangChain 使用 openai_api_key 参数名，但值可以是OpenRouter的API密钥
-        openai_api_base=api_base,
-        streaming=False,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        headers={"HTTP-Referer": "https://my-app.com"}  # OpenRouter需要
+        callback_manager=callbacks if callbacks else None
     )
     
     return chat
@@ -139,9 +119,9 @@ def process_file(file_path, file_type):
         return f"处理文件时出错: {str(e)}"
 
 # 简化文件内容
-def simplify_content(content, direction):
+def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
-    chat = get_langchain_chat("simplify")
+    chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
         backstory = st.session_state.get('material_backstory_prompt', "你是一个专业的内容分析助手。")
@@ -161,9 +141,9 @@ def simplify_content(content, direction):
         return f"简化内容时出错: {str(e)}"
 
 # 生成分析报告
-def generate_analysis(simplified_content, direction):
+def generate_analysis(simplified_content, direction, st_container=None):
     """使用AI生成分析报告"""
-    chat = get_langchain_chat("analysis")
+    chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
         backstory = st.session_state.get('brainstorm_backstory_prompt', "你是一个专业的头脑风暴报告生成助手。")
@@ -264,9 +244,12 @@ with tab1:
             file_name = os.path.basename(file_path)
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
         
+        # 创建一个容器用于流式输出
+        analysis_container = st.empty()
+        
         # 简化内容
         with st.spinner("正在分析素材..."):
-            simplified = simplify_content(all_content, direction)
+            simplified = simplify_content(all_content, direction, st_container=analysis_container)
             st.session_state.simplified_content = simplified
         
         # 显示结果
@@ -279,34 +262,17 @@ with tab1:
     if st.button("生成脑暴报告", disabled=not (st.session_state.simplified_content and st.session_state.direction)):
         # 使用已经生成的简化内容和研究方向
         
+        # 创建一个容器用于流式输出
+        report_container = st.empty()
+        
         # 生成分析报告
         with st.spinner("正在生成脑暴报告..."):
-            report = generate_analysis(st.session_state.simplified_content, st.session_state.direction)
+            report = generate_analysis(st.session_state.simplified_content, st.session_state.direction, st_container=report_container)
             st.session_state.analysis_report = report
         
         # 显示结果
         st.subheader("脑暴报告")
         st.markdown(report)
-        
-        # 导出选项
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.download_button(
-                label="导出报告为TXT",
-                data=report,
-                file_name="分析报告.txt",
-                mime="text/plain"
-            ):
-                st.success("报告已导出为TXT文件")
-        
-        with col2:
-            if st.download_button(
-                label="导出报告为Markdown",
-                data=report,
-                file_name="分析报告.md",
-                mime="text/markdown"
-            ):
-                st.success("报告已导出为Markdown文件")
 
 # 管理员设置标签页
 with tab2:
@@ -364,8 +330,6 @@ with tab2:
     if st.button("保存提示词设置"):
         save_prompts()
 
-# API设置标签页已移除
-
 # 添加页脚
 st.markdown("---")
-st.markdown("© 2025 脑暴助理 | 由Streamlit、LangChain和OpenRouter提供支持")
+st.markdown("© 2025 脑暴助理 | 由姜瑞米提供支持")
