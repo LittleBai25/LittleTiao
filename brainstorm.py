@@ -46,16 +46,25 @@ def get_langchain_chat(model_type="simplify"):
     
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
-        api_key = st.secrets["OPENROUTER_API_KEY_SIMPLIFY"]
-        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
+        api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
+        # 优先使用会话状态中的模型设置
+        model_name = st.session_state.get("OPENROUTER_MODEL_SIMPLIFY", 
+                     st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku"))
         temperature = 0.3
         max_tokens = 2000
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
-        api_key = st.secrets["OPENROUTER_API_KEY_ANALYSIS"]
-        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
+        api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
+        # 优先使用会话状态中的模型设置
+        model_name = st.session_state.get("OPENROUTER_MODEL_ANALYSIS", 
+                     st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet"))
         temperature = 0.5
         max_tokens = 3000
+        
+    # 检查API密钥是否为空
+    if not api_key:
+        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在API设置选项卡中配置。")
+        st.stop()
     
     # 创建LangChain ChatOpenAI客户端
     chat = ChatOpenAI(
@@ -347,8 +356,9 @@ with tab3:
     # 素材分析API设置
     st.header("素材分析API设置")
     
-    if "OPENROUTER_MODEL_SIMPLIFY" not in st.secrets:
-        st.secrets["OPENROUTER_MODEL_SIMPLIFY"] = "anthropic/claude-3-haiku"
+    # 使用会话状态存储模型名称
+    if "OPENROUTER_MODEL_SIMPLIFY" not in st.session_state:
+        st.session_state.OPENROUTER_MODEL_SIMPLIFY = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
     
     api_key_simplify = st.text_input(
         "素材分析API密钥", 
@@ -359,15 +369,16 @@ with tab3:
     
     model_name_simplify = st.text_input(
         "素材分析模型名称",
-        value=st.secrets.get("OPENROUTER_MODEL_SIMPLIFY"),
+        value=st.session_state.OPENROUTER_MODEL_SIMPLIFY,
         help="例如：anthropic/claude-3-haiku, openai/gpt-4-turbo"
     )
     
     # 脑暴报告API设置
     st.header("脑暴报告API设置")
     
-    if "OPENROUTER_MODEL_ANALYSIS" not in st.secrets:
-        st.secrets["OPENROUTER_MODEL_ANALYSIS"] = "anthropic/claude-3-sonnet"
+    # 使用会话状态存储模型名称
+    if "OPENROUTER_MODEL_ANALYSIS" not in st.session_state:
+        st.session_state.OPENROUTER_MODEL_ANALYSIS = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
     
     api_key_analysis = st.text_input(
         "脑暴报告API密钥", 
@@ -378,16 +389,26 @@ with tab3:
     
     model_name_analysis = st.text_input(
         "脑暴报告模型名称",
-        value=st.secrets.get("OPENROUTER_MODEL_ANALYSIS"),
+        value=st.session_state.OPENROUTER_MODEL_ANALYSIS,
         help="例如：anthropic/claude-3-sonnet, openai/gpt-4-turbo"
     )
     
     if st.button("保存API设置"):
-        st.secrets["OPENROUTER_API_KEY_SIMPLIFY"] = api_key_simplify
-        st.secrets["OPENROUTER_MODEL_SIMPLIFY"] = model_name_simplify
-        st.secrets["OPENROUTER_API_KEY_ANALYSIS"] = api_key_analysis
-        st.secrets["OPENROUTER_MODEL_ANALYSIS"] = model_name_analysis
-        st.success("API设置已保存!")
+        # 把API设置保存到会话状态
+        st.session_state.OPENROUTER_MODEL_SIMPLIFY = model_name_simplify
+        st.session_state.OPENROUTER_MODEL_ANALYSIS = model_name_analysis
+        
+        # 提示用户需要手动更新secrets.toml文件
+        st.success("""API设置已暂时保存到会话状态！
+
+要永久保存这些设置，请在Streamlit应用的secrets.toml文件中添加以下内容：
+```
+OPENROUTER_API_KEY_SIMPLIFY = "您的素材分析API密钥"
+OPENROUTER_MODEL_SIMPLIFY = "{}"
+OPENROUTER_API_KEY_ANALYSIS = "您的脑暴报告API密钥"
+OPENROUTER_MODEL_ANALYSIS = "{}"
+```
+""".format(model_name_simplify, model_name_analysis))
 
 # 添加页脚
 st.markdown("---")
