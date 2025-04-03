@@ -66,15 +66,6 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = CallbackManager([StreamlitCallbackHandler(st_container)])
     
-    # 添加配置参数，确保响应不被截断
-    openai_api_extra_kwargs = {
-        "max_tokens": 4000,  # 设置较大的最大tokens数
-        "headers": {
-            "HTTP-Referer": "https://脑暴助理.app",  # 添加应用标识
-            "X-Title": "脑暴助理"  # 添加应用标题
-        }
-    }
-    
     # 创建LangChain ChatOpenAI客户端
     chat = ChatOpenAI(
         model_name=model_name,
@@ -83,7 +74,14 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
         streaming=stream,
         temperature=temperature,
         callback_manager=callbacks if callbacks else None,
-        openai_api_extra_kwargs=openai_api_extra_kwargs
+        # 直接使用标准参数而不是额外参数
+        max_tokens=4000,
+        model_kwargs={
+            "headers": {
+                "HTTP-Referer": "https://脑暴助理.app",
+                "X-Title": "脑暴助理"
+            }
+        }
     )
     
     return chat
