@@ -50,13 +50,11 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
         model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
         temperature = 0.3
-        max_tokens = 2000
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
         model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
         temperature = 0.5
-        max_tokens = 3000
         
     # 检查API密钥是否为空
     if not api_key:
