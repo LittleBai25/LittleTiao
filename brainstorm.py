@@ -91,25 +91,49 @@ def process_file(file_path, file_type):
             
         if file_type == "docx" and DOCX_SUPPORT:
             try:
-                # 使用mammoth进行更完整的转换
+                # 使用mammoth提取纯文本，避免表格重复问题
                 with open(file_path, "rb") as docx_file:
-                    # 设置转换选项，保留表格结构
-                    options = {
-                        "style_map": "table => table"
-                    }
-                    result = mammoth.convert_to_html(docx_file, options=options)
-                    html_content = result.value
+                    # 使用extract_raw_text而不是convert_to_html，避免重复问题
+                    result = mammoth.extract_raw_text(docx_file)
+                    text_content = result.value
                     
                     # 记录转换警告
                     with debug_expander:
                         if result.messages:
                             st.write("Mammoth转换警告:", result.messages)
-                        st.write(f"HTML内容预览: {html_content[:200]}..." if len(html_content) > 200 else html_content)
+                        st.write(f"提取的纯文本内容预览: {text_content[:200]}..." if len(text_content) > 200 else text_content)
                     
-                    st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(html_content)} 字符")
-                    return html_content
+                    # 如果纯文本提取有效，直接返回
+                    if text_content and len(text_content.strip()) > 100:
+                        st.write(f"从DOCX文件 {os.path.basename(file_path)} 提取了 {len(text_content)} 字符")
+                        return text_content
+                    
+                    # 如果纯文本提取结果不理想，尝试HTML转换
+                    with debug_expander:
+                        st.write("纯文本提取结果较短，尝试HTML转换...")
+                    
+                    # 重新打开文件进行HTML转换
+                    with open(file_path, "rb") as docx_file:
+                        # 使用enhanced_convert_to_html自定义表格转换
+                        options = {
+                            "style_map": [
+                                "table => table.docx-table",
+                                "tr => tr",
+                                "td => td",
+                                "th => th"
+                            ]
+                        }
+                        result = mammoth.convert_to_html(docx_file, options=options)
+                        html_content = result.value
+                        
+                        with debug_expander:
+                            st.write(f"HTML转换后内容长度: {len(html_content)} 字符")
+                            st.write(f"HTML内容预览: {html_content[:200]}..." if len(html_content) > 200 else html_content)
+                        
+                        st.write(f"从DOCX文件 {os.path.basename(file_path)} 提取了 {len(html_content)} 字符")
+                        return html_content
             except Exception as e:
-                error_msg = f"读取DOCX文件时出错: {str(e)}"
+                error_msg = f"使用Mammoth读取DOCX文件时出错: {str(e)}"
                 st.error(error_msg)
                 with debug_expander:
                     st.write(error_msg)
@@ -117,18 +141,33 @@ def process_file(file_path, file_type):
                 # 如果mammoth失败，尝试使用docx库作为备选方案
                 try:
                     doc = docx.Document(file_path)
-                    content = "\n\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+                    content_parts = []
                     
-                    # 简单处理表格
-                    for table in doc.tables:
-                        table_content = []
-                        for row in table.rows:
-                            row_content = []
+                    # 提取段落文本
+                    for para in doc.paragraphs:
+                        if para.text.strip():
+                            content_parts.append(para.text)
+                    
+                    # 提取表格内容，用更清晰的格式
+                    for table_idx, table in enumerate(doc.tables):
+                        table_parts = []
+                        table_parts.append(f"\n[表格 {table_idx+1}]\n")
+                        
+                        for row_idx, row in enumerate(table.rows):
+                            row_texts = []
                             for cell in row.cells:
-                                row_content.append(cell.text.strip())
-                            table_content.append(" | ".join(row_content))
-                        content += "\n\n" + "\n".join(table_content)
+                                cell_text = cell.text.strip()
+                                if cell_text:
+                                    row_texts.append(cell_text)
+                            
+                            # 只有当行中有内容时才添加
+                            if row_texts:
+                                table_parts.append(" | ".join(row_texts))
+                        
+                        # 将表格内容加入总内容
+                        content_parts.append("\n".join(table_parts))
                     
+                    content = "\n\n".join(content_parts)
                     st.write(f"从DOCX文件(备选方法)读取了 {len(content)} 字符")
                     return content
                 except Exception as e2:
