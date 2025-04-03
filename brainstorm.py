@@ -14,7 +14,6 @@ except ImportError:
 
 try:
     import docx
-    import mammoth
     DOCX_SUPPORT = True
 except ImportError:
     DOCX_SUPPORT = False
@@ -91,87 +90,113 @@ def process_file(file_path, file_type):
             
         if file_type == "docx" and DOCX_SUPPORT:
             try:
-                # 使用mammoth提取纯文本，避免表格重复问题
-                with open(file_path, "rb") as docx_file:
-                    # 使用extract_raw_text而不是convert_to_html，避免重复问题
-                    result = mammoth.extract_raw_text(docx_file)
-                    text_content = result.value
-                    
-                    # 记录转换警告
-                    with debug_expander:
-                        if result.messages:
-                            st.write("Mammoth转换警告:", result.messages)
-                        st.write(f"提取的纯文本内容预览: {text_content[:200]}..." if len(text_content) > 200 else text_content)
-                    
-                    # 如果纯文本提取有效，直接返回
-                    if text_content and len(text_content.strip()) > 100:
-                        st.write(f"从DOCX文件 {os.path.basename(file_path)} 提取了 {len(text_content)} 字符")
-                        return text_content
-                    
-                    # 如果纯文本提取结果不理想，尝试HTML转换
-                    with debug_expander:
-                        st.write("纯文本提取结果较短，尝试HTML转换...")
-                    
-                    # 重新打开文件进行HTML转换
-                    with open(file_path, "rb") as docx_file:
-                        # 使用enhanced_convert_to_html自定义表格转换
-                        options = {
-                            "style_map": [
-                                "table => table.docx-table",
-                                "tr => tr",
-                                "td => td",
-                                "th => th"
-                            ]
-                        }
-                        result = mammoth.convert_to_html(docx_file, options=options)
-                        html_content = result.value
-                        
-                        with debug_expander:
-                            st.write(f"HTML转换后内容长度: {len(html_content)} 字符")
-                            st.write(f"HTML内容预览: {html_content[:200]}..." if len(html_content) > 200 else html_content)
-                        
-                        st.write(f"从DOCX文件 {os.path.basename(file_path)} 提取了 {len(html_content)} 字符")
-                        return html_content
-            except Exception as e:
-                error_msg = f"使用Mammoth读取DOCX文件时出错: {str(e)}"
-                st.error(error_msg)
-                with debug_expander:
-                    st.write(error_msg)
+                # 使用python-docx直接处理，更精细地提取内容
+                doc = docx.Document(file_path)
+                content_parts = []
                 
-                # 如果mammoth失败，尝试使用docx库作为备选方案
-                try:
-                    doc = docx.Document(file_path)
-                    content_parts = []
+                # 提取段落文本，保留格式信息
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        # 简单格式处理，提取加粗和其他格式
+                        para_text = ""
+                        for run in para.runs:
+                            if run.bold:
+                                para_text += f"**{run.text}**"
+                            else:
+                                para_text += run.text
+                        content_parts.append(para_text)
+                
+                # 提取表格内容，改进问卷表格处理方式
+                for table_idx, table in enumerate(doc.tables):
+                    if len(table.rows) == 0:
+                        continue
                     
-                    # 提取段落文本
-                    for para in doc.paragraphs:
-                        if para.text.strip():
-                            content_parts.append(para.text)
+                    # 添加表格标记
+                    content_parts.append(f"\n## 表格 {table_idx+1}")
                     
-                    # 提取表格内容，用更清晰的格式
-                    for table_idx, table in enumerate(doc.tables):
-                        table_parts = []
-                        table_parts.append(f"\n[表格 {table_idx+1}]\n")
+                    # 判断表格类型和结构
+                    is_questionnaire = False
+                    if len(table.rows) > 1 and len(table.rows[0].cells) > 0:
+                        # 检查第一行是否可能是表头
+                        header_row = [cell.text.strip() for cell in table.rows[0].cells]
+                        is_questionnaire = any("问题" in cell or "题" in cell for cell in header_row) or len(header_row) >= 2
+                    
+                    if is_questionnaire:
+                        # 特殊处理问卷表格，按行分组
+                        headers = []
+                        for cell in table.rows[0].cells:
+                            headers.append(cell.text.strip())
                         
-                        for row_idx, row in enumerate(table.rows):
+                        # 处理内容行
+                        for row_idx in range(1, len(table.rows)):
+                            row_content = []
+                            for col_idx, cell in enumerate(table.rows[row_idx].cells):
+                                cell_text = cell.text.strip()
+                                # 如果有表头且内容不为空，关联显示
+                                if cell_text and col_idx < len(headers) and headers[col_idx]:
+                                    row_content.append(f"{headers[col_idx]}: {cell_text}")
+                                elif cell_text:
+                                    row_content.append(cell_text)
+                            
+                            # 只添加非空内容
+                            if row_content:
+                                content_parts.append(" | ".join(row_content))
+                    else:
+                        # 常规表格处理
+                        for row in table.rows:
                             row_texts = []
                             for cell in row.cells:
                                 cell_text = cell.text.strip()
                                 if cell_text:
+                                    # 替换可能导致格式问题的字符
+                                    cell_text = cell_text.replace('\n', ' ').replace('|', '/')
                                     row_texts.append(cell_text)
                             
-                            # 只有当行中有内容时才添加
+                            # 只添加非空行
                             if row_texts:
-                                table_parts.append(" | ".join(row_texts))
-                        
-                        # 将表格内容加入总内容
-                        content_parts.append("\n".join(table_parts))
+                                content_parts.append(" | ".join(row_texts))
+                
+                # 合并所有内容
+                content = "\n\n".join(content_parts)
+                
+                # 记录日志
+                st.write(f"从DOCX文件 {os.path.basename(file_path)} 读取了 {len(content)} 字符")
+                with debug_expander:
+                    st.write(f"段落数: {len(doc.paragraphs)}, 表格数: {len(doc.tables)}")
+                    st.write(f"文档内容预览: {content[:200]}..." if len(content) > 200 else content)
                     
-                    content = "\n\n".join(content_parts)
-                    st.write(f"从DOCX文件(备选方法)读取了 {len(content)} 字符")
-                    return content
+                # 后处理，清理可能的重复内容和格式标记
+                content = content.replace('{.mark}', '').replace('{.underline}', '')
+                
+                return content
+            except Exception as e:
+                error_msg = f"读取DOCX文件时出错: {str(e)}"
+                st.error(error_msg)
+                with debug_expander:
+                    st.write(error_msg)
+                    
+                # 如果解析失败，尝试最简单的方法提取文本
+                try:
+                    text_content = []
+                    doc = docx.Document(file_path)
+                    
+                    # 只提取文本，忽略格式
+                    for para in doc.paragraphs:
+                        if para.text.strip():
+                            text_content.append(para.text)
+                    
+                    # 简单提取表格文本
+                    for table in doc.tables:
+                        for row in table.rows:
+                            row_text = " | ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
+                            if row_text:
+                                text_content.append(row_text)
+                    
+                    simple_content = "\n\n".join(text_content)
+                    st.write(f"使用备选方法从DOCX文件提取了 {len(simple_content)} 字符")
+                    return simple_content
                 except Exception as e2:
-                    error_msg = f"备选方法读取DOCX文件时出错: {str(e2)}"
+                    error_msg = f"备选方法也失败: {str(e2)}"
                     st.error(error_msg)
                     return error_msg
                 
@@ -266,21 +291,26 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.material_task_prompt
         output_format = st.session_state.material_output_prompt
         
-        # 构建提示模板
+        # 增强提示模板的明确性
         template = f"""{backstory}
 
 {task}
 
 {output_format}
 
-请注意：
-1. 只分析提供的文档内容
-2. 输出必须与研究方向相关
-3. 不要生成与文档无关的内容列表
+重要注意事项:
+1. 请认真分析所提供的文档，识别出最关键的信息和见解
+2. 输出必须与研究方向"{direction}"直接相关
+3. 必须提供深入的分析而非表面的总结
+4. 不要生成与文档无关的内容
+5. 如果文档中包含表格数据，请特别分析其中的关系和意义
 
-分析以下文档内容，研究方向是{{direction}}:
+研究方向: {{direction}}
 
-{{content}}"""
+文档内容:
+{{content}}
+
+请提供详细分析和见解，突出最重要的发现。"""
         
         prompt = PromptTemplate(
             template=template,
@@ -303,13 +333,13 @@ def simplify_content(content, direction, st_container=None):
         # 检查结果
         with debug_expander:
             st.write(f"AI返回结果长度: {len(result)} 字符")
-            if len(result) < 10:
+            if len(result) < 100:
                 st.error("警告: AI返回内容异常短!")
                 st.write(f"完整返回内容: '{result}'")
         
-        # 如果返回内容为空，提供简短的错误信息
-        if not result or len(result.strip()) < 10:
-            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
+        # 如果返回内容为空或过短，提供更明确的错误信息
+        if not result or len(result.strip()) < 100:
+            return "AI分析未能生成足够深入的结果。这可能是因为：1)文档内容与研究方向不匹配 2)文档格式难以解析 3)API限制。请调整研究方向或检查文档内容后重试。"
         
         return result
     except Exception as e:
@@ -326,31 +356,34 @@ def generate_analysis(simplified_content, direction, st_container=None):
     
     try:
         # 检查简化内容是否有效
-        if not simplified_content or len(simplified_content.strip()) < 10:
-            return "无法生成报告，因为文档分析阶段未能产生有效内容。请返回上一步重试。"
+        if not simplified_content or len(simplified_content.strip()) < 100:
+            return "无法生成报告，因为文档分析阶段未能产生足够深入的内容。请返回上一步重试，调整研究方向或上传更相关的文档。"
             
         # 从会话状态获取提示词
         backstory = st.session_state.brainstorm_backstory_prompt
         task = st.session_state.brainstorm_task_prompt
         output_format = st.session_state.brainstorm_output_prompt
         
-        # 构建提示模板
+        # 增强提示模板的明确性和结构
         template = f"""{backstory}
 
 {task}
 
 {output_format}
 
-请注意：
-1. 只根据提供的分析结果生成报告
-2. 不要生成与研究方向无关的内容
+重要要求:
+1. 基于提供的分析结果，生成一份详尽、实用的报告
+2. 报告必须与研究方向"{direction}"紧密结合
+3. 提供具体的、可实施的策略和方案
+4. 包含清晰的结构和小标题
+5. 内容必须具备原创性和创新性
 
 研究方向: {{direction}}
 
 分析结果:
 {{simplified_content}}
 
-请生成一份申请策略和提升方案的报告。"""
+请生成一份全面的申请策略和提升方案报告，确保包含明确的小标题和结构化内容。"""
         
         prompt = PromptTemplate(
             template=template,
@@ -372,9 +405,9 @@ def generate_analysis(simplified_content, direction, st_container=None):
         with debug_expander:
             st.write(f"AI返回报告长度: {len(result)} 字符")
         
-        # 如果返回为空，提供简短错误信息
-        if not result or len(result.strip()) < 50:
-            return "生成报告失败。请检查分析内容是否有效，或调整提示词设置。"
+        # 如果返回为空或过短，提供更明确的错误信息
+        if not result or len(result.strip()) < 200:
+            return "生成报告失败。AI未能生成有意义的内容，可能是因为分析内容不够详细或研究方向过于模糊。请调整提示词设置或返回上一步提供更充分的信息。"
         
         return result
     except Exception as e:
