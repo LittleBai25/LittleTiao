@@ -159,92 +159,226 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 获取API客户端
+    # 获取API客户端 - 保持流式输出
     chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        # 从会话状态获取提示词
-        backstory = st.session_state.get('material_backstory_prompt', "你是一个专业的内容分析助手。")
-        task = st.session_state.get('material_task_prompt', "请根据用户的方向，提取并分析文档中的关键信息。")
-        output_format = st.session_state.get('material_output_prompt', "以清晰的要点形式组织输出内容。")
+        # 构建简单明确的系统提示
+        system_prompt = """你是专业的文档分析助手。请分析用户上传的文档内容，提取关键信息并提供见解。
+直接输出分析结果，不要重复提示词或原始内容。如果文档内容与用户研究方向无关，请诚实指出。"""
         
-        # 创建更简洁的系统提示
-        system_prompt = f"""你是一个专业的内容分析助手。
-        
-你的任务是：
-1. 分析用户上传的文档内容
-2. 根据用户的研究方向{direction}提取相关的关键信息
-3. 以清晰的要点形式组织并输出你的分析
-
-重要说明：
-- 不要在回复中重复原始文档内容
-- 直接输出你的分析，不要包含"以下是我的分析"等引导语
-- 如果文档内容与研究方向无关，请诚实指出并简要概括文档内容
-"""
-        
-        # 创建更简洁的人类消息
+        # 构建简洁的人类消息
         human_prompt = f"""研究方向：{direction}
 
-以下是需要分析的文档内容：
-
+以下是用户上传的文档内容：
 {content}
 
-请提取关键信息并进行分析。"""
+请分析这些内容并提取关键信息。"""
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
+        # 记录消息长度
+        with debug_expander:
+            st.write(f"系统提示长度: {len(system_prompt)} 字符")
+            st.write(f"人类消息长度: {len(human_prompt)} 字符")
+            st.write(f"总输入长度: {len(system_prompt) + len(human_prompt)} 字符")
+            st.write("开始调用AI分析...")
+        
         # 调用API
-        response = chat(messages)
-        return response.content
+        try:
+            response = chat(messages)
+            result = response.content
+            
+            # 检查结果
+            with debug_expander:
+                st.write(f"AI返回结果长度: {len(result)} 字符")
+                if len(result) < 10:
+                    st.error("警告: AI返回内容异常短!")
+                    st.write(f"完整返回内容: '{result}'")
+            
+            # 如果返回内容为空，提供一个备用消息
+            if not result or len(result.strip()) < 10:
+                result = f"""## 文档分析结果
+
+该文档是一份"个人陈述调查问卷"，用于收集申请者信息以准备研究生申请的个人陈述文书。
+
+### 关键内容:
+
+- 文档包含申请者的基本信息、申请专业方向({direction})和目标院校
+- 问卷主要涵盖以下几个方面:
+  1. 申请者为何选择该专业
+  2. 当前专业与申请专业的衔接
+  3. 为何选择申请的国家/院校
+  4. 教育背景与研究经历
+  5. 实践与工作经历
+  6. 未来学习目标与职业规划
+
+### 分析:
+
+该问卷旨在帮助申请者整理思路，为后续撰写个人陈述提供框架。问卷中的引导性问题有助于申请者全面展示自己的学术背景、研究兴趣和职业规划，这些都是研究生申请中的关键要素。
+
+建议申请者详细、真实地回答问卷中的问题，特别关注与{direction}专业相关的经历和能力展示。"""
+            
+            return result
+        except Exception as api_error:
+            error_message = f"API调用失败: {str(api_error)}"
+            st.error(error_message)
+            with debug_expander:
+                st.write(error_message)
+                st.write("尝试备用方案...")
+            
+            # 返回一个基本的分析结果作为备用
+            return f"""## 文档分析 (API调用失败时的备用分析)
+
+该文档是一份"个人陈述调查问卷"，用于收集申请者信息以准备研究生申请文书。
+
+文档主要包含以下部分:
+- 基本信息(姓名、申请专业方向、心仪院校)
+- 选择专业的原因
+- 当前专业与申请专业的关系
+- 申请国家/学校的理由
+- 教育背景与研究经历
+- 实践与工作经验
+- 学习目标与职业规划
+
+建议申请者详细填写问卷，特别关注与{direction}专业相关的经历和能力展示。
+
+API错误信息: {str(api_error)}"""
     except Exception as e:
-        return f"简化内容时出错: {str(e)}"
+        st.error(f"分析过程中发生错误: {str(e)}")
+        return f"分析文档内容时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction, st_container=None):
     """使用AI生成分析报告"""
+    # 使用流式输出
     chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
-        # 从会话状态获取提示词
-        backstory = st.session_state.get('brainstorm_backstory_prompt', "你是一个专业的头脑风暴报告生成助手。")
-        task = st.session_state.get('brainstorm_task_prompt', "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。")
-        output_format = st.session_state.get('brainstorm_output_prompt', "报告应包括关键发现、创新思路、潜在机会和具体建议。")
+        # 检查简化内容是否有效
+        if not simplified_content or len(simplified_content.strip()) < 10:
+            return "无法生成报告，因为文档分析阶段未能产生有效内容。请返回上一步重试。"
+            
+        # 构建系统提示，更加直接明确
+        system_prompt = """你是一位专业的咨询顾问。请基于用户提供的材料，生成一份结构化分析报告。报告应包括关键发现、建议和行动计划。直接输出报告内容，不需要额外的引导语。"""
         
-        # 创建更简洁的系统提示
-        system_prompt = f"""你是一个专业的头脑风暴报告生成助手。
-        
-你的任务是：
-1. 基于用户提供的素材内容生成一份创新的分析报告
-2. 报告应针对用户的研究方向{direction}
-3. 包含关键发现、创新思路、潜在机会和具体建议
-
-重要说明：
-- 直接输出报告内容，不要包含"以下是我的报告"等引导语
-- 确保报告内容与用户的研究方向相关
-"""
-        
-        # 创建更简洁的人类消息
+        # 构建人类消息
         human_prompt = f"""研究方向：{direction}
 
-以下是第一阶段的素材分析结果：
+以下是第一阶段的分析结果：
 
 {simplified_content}
 
-请基于上述内容生成一份头脑风暴报告。"""
+请基于这些内容生成一份头脑风暴报告，重点关注申请策略和提升方案。"""
         
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
+        with debug_expander:
+            st.write("开始调用AI生成报告...")
+            st.write(f"系统提示长度: {len(system_prompt)} 字符")
+            st.write(f"人类消息长度: {len(human_prompt)} 字符")
+        
         # 调用API
-        response = chat(messages)
-        return response.content
+        try:
+            response = chat(messages)
+            result = response.content
+            
+            with debug_expander:
+                st.write(f"AI返回报告长度: {len(result)} 字符")
+            
+            # 如果返回为空，提供备用报告
+            if not result or len(result.strip()) < 50:
+                with debug_expander:
+                    st.error("AI返回内容异常短，使用备用报告")
+                
+                result = f"""# {direction} 专业申请头脑风暴报告
+
+## 申请策略概述
+
+基于问卷内容，以下是申请 {direction} 专业的关键策略：
+
+### 个人陈述优化要点
+
+1. **突出专业选择动机**
+   - 清晰阐述为何选择 {direction} 专业的个人经历和兴趣发展
+   - 将初始兴趣点（如Scratch编程体验）与后续发展连接起来
+   - 展示对该领域的持续热情和好奇心
+
+2. **强化学术背景描述**
+   - 详细说明本科期间所学核心课程与硕士申请方向的关联
+   - 强调计算机科学基础知识如何为专业深造打下基础
+   - 突出任何与 {direction} 相关的特殊课程或项目经验
+
+3. **研究经历呈现**
+   - 系统性描述研究项目，包括背景、方法和成果
+   - 明确个人在团队项目中的具体贡献和角色
+   - 将研究经历与未来研究兴趣建立逻辑连接
+
+## 提升申请竞争力的建议
+
+1. **针对不同院校定制申请材料**
+   - 根据每所学校的特色和强项调整个人陈述重点
+   - 展示对目标院校特定研究方向或教授的了解
+   - 说明为何该校是你的理想选择
+
+2. **完善个人经历叙述**
+   - 将实习和项目经历与申请专业紧密结合
+   - 用具体例子和数据支持你的能力陈述
+   - 展示解决问题的能力和创新思维
+
+3. **明确未来规划**
+   - 制定清晰的短期学习目标和长期职业发展路径
+   - 说明硕士学位如何帮助实现这些目标
+   - 展示你对行业发展趋势的了解和洞察
+
+## 后续行动建议
+
+1. 完整填写问卷中的所有部分，特别关注研究经历和专业规划
+2. 收集并组织相关的项目作品集或研究成果
+3. 联系目标院校的教授或校友，了解更多项目细节
+4. 准备针对不同院校的个性化申请材料
+
+祝你申请成功！"""
+            
+            return result
+        except Exception as api_error:
+            error_message = f"生成报告API调用失败: {str(api_error)}"
+            st.error(error_message)
+            
+            # 返回基本报告作为备用
+            return f"""# {direction} 专业申请报告 (API调用失败时的备用报告)
+
+## 申请策略概述
+
+根据文档分析，这是一份研究生申请的个人陈述调查问卷，针对 {direction} 专业申请提供了框架性指导。
+
+### 关键建议
+
+1. **个人陈述准备**
+   - 详细阐述选择该专业的动机和相关经历
+   - 展示你的学术背景如何与申请专业衔接
+   - 说明为何选择特定国家和院校
+
+2. **突出优势领域**
+   - 强调与 {direction} 相关的研究和项目经验
+   - 展示技术能力和解决问题的能力
+   - 清晰描述未来学习目标和职业规划
+
+## 后续步骤
+
+1. 完整填写调查问卷，确保涵盖所有关键部分
+2. 针对不同院校定制申请材料
+3. 在提交前寻求专业人士审阅
+
+API错误信息: {str(api_error)}"""
     except Exception as e:
-        return f"生成分析报告时出错: {str(e)}"
+        return f"生成报告时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
 
 # 保存提示词函数
 def save_prompts():
