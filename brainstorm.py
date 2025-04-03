@@ -47,20 +47,34 @@ def get_langchain_chat(model_type="simplify"):
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "deepseek/deepseek-v3-base:free")
+        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
         temperature = 0.3
         max_tokens = 2000
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "deepseek/deepseek-v3-base:free")
-        temperature = 0.3
+        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
+        temperature = 0.5
         max_tokens = 3000
         
     # 检查API密钥是否为空
     if not api_key:
         st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
         st.stop()
+    
+    # 创建LangChain ChatOpenAI客户端
+    chat = ChatOpenAI(
+        model_name=model_name,
+        openai_api_key=api_key,
+        openai_api_base=api_base,
+        streaming=False,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        # OpenRouter需要HTTP-Referer头，但要通过OpenAI类的额外配置传递
+        model_kwargs={"headers": {"HTTP-Referer": "https://my-app.com"}}
+    )
+    
+    return chat
     
     # 创建LangChain ChatOpenAI客户端
     chat = ChatOpenAI(
