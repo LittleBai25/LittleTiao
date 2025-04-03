@@ -135,32 +135,37 @@ def simplify_content(content, direction, st_container=None):
     # 记录日志，确认内容长度
     st.write(f"准备分析的内容总长度: {len(content)} 字符")
     
-    # 获取API客户端 - 禁用流式输出以获得完整响应
-    chat = get_langchain_chat("simplify", stream=False, st_container=st_container)
+    # 获取API客户端
+    chat = get_langchain_chat("simplify", stream=True, st_container=st_container)
     
     try:
-        # 检查文件内容长度是否太短
-        if len(content.strip()) < 100:
-            return f"文档内容太短，无法进行有效分析。请确保上传文件内容充足。\n\n当前内容：\n{content}"
-            
-        # 构建系统提示
-        system_prompt = """你是一位数据分析专家。请分析用户提供的文档内容，提取关键信息并给出见解。
+        # 从会话状态获取提示词
+        backstory = st.session_state.get('material_backstory_prompt', "你是一个专业的内容分析助手。")
+        task = st.session_state.get('material_task_prompt', "请根据用户的方向，提取并分析文档中的关键信息。")
+        output_format = st.session_state.get('material_output_prompt', "以清晰的要点形式组织输出内容。")
         
+        # 创建更简洁的系统提示
+        system_prompt = f"""你是一个专业的内容分析助手。
+        
+你的任务是：
+1. 分析用户上传的文档内容
+2. 根据用户的研究方向{direction}提取相关的关键信息
+3. 以清晰的要点形式组织并输出你的分析
+
 重要说明：
-1. 你必须客观分析文档实际内容，不要生成文档中不存在的信息
-2. 如果文档不包含足够的信息，请诚实地说明这一点
-3. 直接开始你的分析，不要重复用户的指令
-4. 不要在回复中包含"文档内容"、"研究方向"等提示短语
-5. 如果文档与研究方向无关，请诚实地指出这一点"""
+- 不要在回复中重复原始文档内容
+- 直接输出你的分析，不要包含"以下是我的分析"等引导语
+- 如果文档内容与研究方向无关，请诚实指出并简要概括文档内容
+"""
         
-        # 构建人类消息 - 提供研究方向作为背景信息
-        human_prompt = f"""以下是我需要分析的文档内容，研究方向是{direction}：
+        # 创建更简洁的人类消息
+        human_prompt = f"""研究方向：{direction}
 
-<<<开始>>>
+以下是需要分析的文档内容：
+
 {content}
-<<<结束>>>
 
-请分析这份文档的实际内容并提供见解。"""
+请提取关键信息并进行分析。"""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -169,55 +174,42 @@ def simplify_content(content, direction, st_container=None):
         
         # 调用API
         response = chat(messages)
-        
-        # 获取结果
-        result = response.content
-        
-        # 添加验证逻辑来确保AI真的分析了内容
-        if "我无法" in result or "无法提供" in result or "没有足够信息" in result:
-            result += "\n\n文档内容可能不足。请上传更详细的文档，我们会根据实际内容进行分析。"
-                
-        return result
+        return response.content
     except Exception as e:
-        return f"分析文档内容时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
+        return f"简化内容时出错: {str(e)}"
 
 # 生成分析报告
 def generate_analysis(simplified_content, direction, st_container=None):
     """使用AI生成分析报告"""
-    # 使用非流式模式以获得完整响应
-    chat = get_langchain_chat("analysis", stream=False, st_container=st_container)
+    chat = get_langchain_chat("analysis", stream=True, st_container=st_container)
     
     try:
-        # 检查简化内容是否有效
-        if not simplified_content or "分析文档内容时出错" in simplified_content:
-            return "无法生成报告，因为文档分析阶段出现错误。请返回上一步重试。"
-            
-        # 构建系统提示，更加直接明确
-        system_prompt = """你是一位专业的创新咨询顾问。
+        # 从会话状态获取提示词
+        backstory = st.session_state.get('brainstorm_backstory_prompt', "你是一个专业的头脑风暴报告生成助手。")
+        task = st.session_state.get('brainstorm_task_prompt', "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。")
+        output_format = st.session_state.get('brainstorm_output_prompt', "报告应包括关键发现、创新思路、潜在机会和具体建议。")
         
-请你仔细阅读用户提供的分析材料，并生成一份创新的头脑风暴报告。
+        # 创建更简洁的系统提示
+        system_prompt = f"""你是一个专业的头脑风暴报告生成助手。
         
-报告必须包括：
-1. 对材料的关键见解
-2. 创新思路和潜在机会
-3. 具体的行动建议
-        
-注意事项：
-- 你的报告必须基于用户提供的实际材料
-- 如果材料中缺乏关键信息，请诚实指出
-- 不要在回复中包含"研究方向"、"素材内容"等提示性短语
-- 直接开始你的报告，不需要标题或前言"""
-        
-        # 构建人类消息，让AI专注于已提供的内容
-        human_prompt = f"""我的研究方向是{direction}。
-        
-以下是第一阶段的分析材料：
+你的任务是：
+1. 基于用户提供的素材内容生成一份创新的分析报告
+2. 报告应针对用户的研究方向{direction}
+3. 包含关键发现、创新思路、潜在机会和具体建议
 
-<<<开始>>>
+重要说明：
+- 直接输出报告内容，不要包含"以下是我的报告"等引导语
+- 确保报告内容与用户的研究方向相关
+"""
+        
+        # 创建更简洁的人类消息
+        human_prompt = f"""研究方向：{direction}
+
+以下是第一阶段的素材分析结果：
+
 {simplified_content}
-<<<结束>>>
 
-请基于这些实际材料生成头脑风暴报告。"""
+请基于上述内容生成一份头脑风暴报告。"""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -226,15 +218,9 @@ def generate_analysis(simplified_content, direction, st_container=None):
         
         # 调用API
         response = chat(messages)
-        result = response.content
-        
-        # 添加验证逻辑
-        if "我无法" in result or "无法提供" in result or "缺乏足够" in result:
-            result += "\n\n提示：请确保上传的文档包含足够丰富的内容，以便生成有价值的报告。"
-            
-        return result
+        return response.content
     except Exception as e:
-        return f"生成报告时出错: {str(e)}\n\n请尝试刷新页面或联系系统管理员。"
+        return f"生成分析报告时出错: {str(e)}"
 
 # 保存提示词函数
 def save_prompts():
@@ -290,7 +276,7 @@ with tab1:
     # 第一步：上传文件和输入方向
     st.header("第一步：上传文件和输入研究方向")
     
-    uploaded_files = st.file_uploader("上传文件（支持DOC, DOCX, PDF, JPG, PNG）", 
+    uploaded_files = st.file_uploader("上传文件（支持DOC, DOCX, PDF, JPG, PNG, TXT）", 
                                      type=['doc', 'docx', 'pdf', 'jpg', 'jpeg', 'png', 'txt'], 
                                      accept_multiple_files=True)
     
@@ -309,6 +295,7 @@ with tab1:
         temp_dir = tempfile.mkdtemp()
         file_paths = []
         
+        # 保存文件并添加到处理列表
         for file in uploaded_files:
             file_path = os.path.join(temp_dir, file.name)
             with open(file_path, "wb") as f:
@@ -321,18 +308,20 @@ with tab1:
         st.session_state.uploaded_files = file_paths
         st.session_state.direction = direction
         
-        # 处理上传的文件内容
+        # 处理上传的文件内容，逐个处理每个文件并收集内容
         all_content = ""
         for file_path in file_paths:
             file_ext = Path(file_path).suffix.lower().replace(".", "")
+            
             with debug_expander:
                 st.write(f"处理文件: {os.path.basename(file_path)}, 类型: {file_ext}")
             
+            # 使用process_file函数提取文件内容，并添加到all_content
             content = process_file(file_path, file_ext)
             file_name = os.path.basename(file_path)
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
         
-        # 验证文件内容
+        # 验证文件内容不为空
         if not all_content or len(all_content.strip()) < 50:
             st.error("❌ 文件内容似乎为空或过短。请确保上传了有效的文件。")
             with debug_expander:
@@ -354,6 +343,7 @@ with tab1:
             with debug_expander:
                 st.write("开始调用 AI 简化内容...")
             
+            # 调用AI分析内容
             simplified = simplify_content(all_content, direction, st_container=analysis_container)
             
             # 确保立即保存简化内容到会话状态
