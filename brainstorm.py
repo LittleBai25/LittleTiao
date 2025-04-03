@@ -85,6 +85,10 @@ def get_langchain_chat(model_type="simplify", stream=False, st_container=None):
 def process_file(file_path, file_type):
     """处理不同类型的文件并返回内容"""
     try:
+        # 检查文件是否存在并有内容
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            return f"警告: 文件 {os.path.basename(file_path)} 为空或不存在"
+            
         if file_type == "docx" and DOCX_SUPPORT:
             doc = docx.Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
@@ -128,11 +132,24 @@ def simplify_content(content, direction, st_container=None):
         task = st.session_state.get('material_task_prompt', "请根据用户的方向，提取并分析文档中的关键信息。")
         output_format = st.session_state.get('material_output_prompt', "以清晰的要点形式组织输出内容。")
         
-        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}"
+        # 修改：增强系统提示，确保模型不会输出重复内容
+        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}\n\n重要：分析应基于用户提供的文档内容。不要输出重复内容或固定模板。"
+        
+        # 修改：在人类消息中强调分析原始内容
+        human_prompt = f"""
+我需要针对以下方向简化这份文档的内容: {direction}
+
+请仔细分析以下文档内容，提取与研究方向相关的关键信息：
+
+文档内容:
+{content}
+
+请提供基于以上内容的深入分析，不要输出任何与上述文档无关的内容。
+"""
         
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=f"我需要针对以下方向简化这份文档的内容: {direction}\n\n文档内容:\n{content}")
+            HumanMessage(content=human_prompt)
         ]
         
         response = chat(messages)
@@ -150,11 +167,22 @@ def generate_analysis(simplified_content, direction, st_container=None):
         task = st.session_state.get('brainstorm_task_prompt', "你的任务是根据素材分析内容和用户的研究方向，生成一份创新的头脑风暴报告。")
         output_format = st.session_state.get('brainstorm_output_prompt', "报告应包括关键发现、创新思路、潜在机会和具体建议。")
         
-        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}"
+        # 修改：增强系统提示
+        system_prompt = f"{backstory}\n\n{task}\n\n{output_format}\n\n重要：报告应基于用户提供的素材分析内容。不要输出重复内容或固定模板。"
+        
+        # 修改：强调基于简化内容生成报告
+        human_prompt = f"""
+我的研究方向是: {direction}
+
+基于以下简化后的内容，请为我生成一份详细的分析报告:
+{simplified_content}
+
+请确保报告内容直接基于以上分析内容，不要输出与之无关的固定模板。
+"""
         
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=f"我的研究方向是: {direction}\n\n基于以下简化后的内容，请为我生成一份详细的分析报告:\n{simplified_content}")
+            HumanMessage(content=human_prompt)
         ]
         
         response = chat(messages)
@@ -244,6 +272,11 @@ with tab1:
             content = process_file(file_path, file_ext)
             file_name = os.path.basename(file_path)
             all_content += f"\n\n===== 文件: {file_name} =====\n\n{content}"
+        
+        # 修改：验证文件内容
+        if not all_content or len(all_content.strip()) < 50:
+            st.error("❌ 文件内容似乎为空或过短。请确保上传了有效的文件。")
+            st.stop()
         
         # 创建一个容器用于流式输出
         analysis_container = st.empty()
@@ -338,4 +371,4 @@ with tab2:
 
 # 添加页脚
 st.markdown("---")
-st.markdown("© 2025 脑暴助理 | 由姜瑞米提供支持")
+st.markdown("© 2025 脑暴助理 | 由Streamlit、LangChain和OpenRouter提供支持")
