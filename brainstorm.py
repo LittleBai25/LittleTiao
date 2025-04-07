@@ -325,15 +325,80 @@ def simplify_content(content, direction, st_container=None):
         clean_content = clean_content.replace('\x00', '')  # 移除空字符
         clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
         
-        # 将内容分块
-        chunks = split_into_paragraphs(clean_content)
-        all_results = []
+        # 创建进度条
+        progress_bar = st.progress(0)
+        st.info(f"文档总长度约为 {len(clean_content)} 字符 (约 {len(clean_content) // 4} tokens)")
         
-        # 处理每个块
-        for i, chunk in enumerate(chunks, 1):
-            with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
-                # 简化提示模板
-                template = f"""{backstory}
+        # 尝试两种模式：不分块或适度分块
+        try_modes = ['no_chunks', 'few_chunks']
+        result = None
+        
+        for mode_index, mode in enumerate(try_modes):
+            try:
+                progress_bar.progress((mode_index) / len(try_modes))
+                
+                if mode == 'no_chunks':
+                    st.info("尝试不分块处理文档...")
+                    
+                    # 简化提示模板
+                    template = f"""{backstory}
+
+{task}
+
+{output_format}
+
+研究方向: {direction}
+
+要求:
+1. 仔细阅读并理解文档内容
+2. 提取与研究方向"{direction}"相关的所有关键信息
+3. 保持原文的层次结构和逻辑关系
+4. 使用清晰的标题和列表组织内容
+5. 避免重复内容，保持简洁明了
+6. 如果内容与研究方向无关，请明确指出
+
+文档内容:
+{clean_content}
+
+请生成结构化的分析结果。如果内容与研究方向无关，请说明原因。"""
+                    
+                    prompt = PromptTemplate(
+                        template=template,
+                        input_variables=["direction", "clean_content"]
+                    )
+                    
+                    # 创建LLMChain
+                    chain = LLMChain(llm=llm, prompt=prompt)
+                    
+                    try:
+                        st.info("正在处理整个文档，这可能需要一些时间...")
+                        result = chain.run(direction=direction, clean_content=clean_content)
+                        
+                        if result and len(result.strip()) > 10:
+                            st.success("成功处理完整文档！")
+                            break  # 如果成功处理，跳出循环
+                        else:
+                            st.warning("处理整个文档未能生成有效结果，尝试使用适度分块...")
+                    except Exception as e:
+                        st.warning(f"尝试不分块处理时出错: {str(e)}")
+                        st.info("将尝试使用适度分块...")
+                
+                elif mode == 'few_chunks':
+                    st.info("尝试使用适度分块处理文档...")
+                    
+                    # 使用较大的块大小
+                    chunks = split_into_paragraphs(clean_content, max_tokens=8000)
+                    st.info(f"文档被分为 {len(chunks)} 个部分")
+                    
+                    all_results = []
+                    
+                    # 处理每个块
+                    for i, chunk in enumerate(chunks, 1):
+                        with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
+                            progress_bar.progress((mode_index + (i / len(chunks))) / len(try_modes))
+                            
+                            # 简化提示模板
+                            template = f"""{backstory}
 
 {task}
 
@@ -348,47 +413,39 @@ def simplify_content(content, direction, st_container=None):
 4. 使用清晰的标题和列表组织内容
 5. 避免重复内容，保持简洁明了
 6. 这是文档的第 {i} 部分，请专注于这部分内容
-7. 注意与前后文的连贯性
-8. 如果内容与研究方向无关，请明确指出
+7. 如果内容与研究方向无关，请明确指出
 
 文档内容:
 {chunk}
 
 请生成结构化的分析结果。如果内容与研究方向无关，请说明原因。"""
-                
-                prompt = PromptTemplate(
-                    template=template,
-                    input_variables=["direction", "chunk"]
-                )
-                
-                # 创建LLMChain
-                chain = LLMChain(llm=llm, prompt=prompt)
-                
-                try:
-                    result = chain.run(direction=direction, chunk=chunk)
-                    if result and len(result.strip()) > 10:
-                        all_results.append(result)
-                    else:
-                        st.warning(f"第 {i} 部分生成的结果为空或过短")
-                        st.info(f"内容预览: {chunk[:200]}...")
-                except Exception as e:
-                    st.error(f"处理第 {i} 部分时出错: {str(e)}")
-                    st.info(f"内容预览: {chunk[:200]}...")
-                    continue
-        
-        # 检查是否有有效结果
-        if not all_results:
-            st.error("未能生成有效结果")
-            st.info("可能的原因：")
-            st.info("1. 文档内容与研究方向不相关")
-            st.info("2. 提示词设置可能需要调整")
-            st.info("3. API调用可能失败")
-            st.info("4. 内容分块可能过小，导致上下文不完整")
-            st.info("5. 研究方向描述可能不够明确")
-            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
-        
-        # 使用LLM合并结果
-        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
+                            
+                            prompt = PromptTemplate(
+                                template=template,
+                                input_variables=["direction", "chunk"]
+                            )
+                            
+                            # 创建LLMChain
+                            chain = LLMChain(llm=llm, prompt=prompt)
+                            
+                            try:
+                                chunk_result = chain.run(direction=direction, chunk=chunk)
+                                if chunk_result and len(chunk_result.strip()) > 10:
+                                    all_results.append(chunk_result)
+                                    st.success(f"成功处理第 {i} 部分")
+                                else:
+                                    st.warning(f"第 {i} 部分生成的结果为空或过短")
+                                    st.info(f"内容预览: {chunk[:200]}...")
+                            except Exception as e:
+                                st.error(f"处理第 {i} 部分时出错: {str(e)}")
+                                st.info(f"内容预览: {chunk[:200]}...")
+                                continue
+                    
+                    # 检查是否有有效结果
+                    if all_results:
+                        # 使用LLM合并结果
+                        st.info("合并所有处理结果...")
+                        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
 
 分析结果:
 {results}
@@ -398,16 +455,37 @@ def simplify_content(content, direction, st_container=None):
 2. 去除重复内容
 3. 确保各部分之间的连贯性
 4. 突出与研究方向相关的关键信息"""
+                        
+                        merge_prompt = PromptTemplate(
+                            template=merge_template,
+                            input_variables=["results"]
+                        )
+                        
+                        merge_chain = LLMChain(llm=llm, prompt=merge_prompt)
+                        result = merge_chain.run(results="\n\n".join(all_results))
+                        
+                        if result and len(result.strip()) > 10:
+                            st.success("成功合并所有部分的结果！")
+                            break  # 如果成功处理，跳出循环
+            
+            except Exception as e:
+                st.error(f"处理模式 {mode} 时出错: {str(e)}")
         
-        merge_prompt = PromptTemplate(
-            template=merge_template,
-            input_variables=["results"]
-        )
+        # 完成进度条
+        progress_bar.progress(1.0)
         
-        merge_chain = LLMChain(llm=llm, prompt=merge_prompt)
-        final_result = merge_chain.run(results="\n\n".join(all_results))
+        # 检查是否有有效结果
+        if not result or len(result.strip()) < 10:
+            st.error("未能生成有效结果")
+            st.info("可能的原因：")
+            st.info("1. 文档内容与研究方向不相关")
+            st.info("2. 提示词设置可能需要调整")
+            st.info("3. API调用可能失败")
+            st.info("4. 研究方向描述可能不够明确")
+            st.info("5. 文档内容可能过于复杂或格式不适合处理")
+            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
-        return final_result
+        return result
     except Exception as e:
         st.error(f"分析过程中发生错误: {str(e)}")
         return f"分析过程中发生错误: {str(e)}"
