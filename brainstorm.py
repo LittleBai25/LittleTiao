@@ -48,12 +48,12 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
         model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
-        temperature = 0.3
+        temperature = 0.1  # 降低温度以获得更稳定的输出
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
         model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
-        temperature = 0.5
+        temperature = 0.3  # 降低温度以获得更稳定的输出
         
     # 检查API密钥是否为空
     if not api_key:
@@ -75,7 +75,9 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         max_tokens=4000,
         callbacks=callbacks,
         request_timeout=60,  # 增加超时时间到60秒
-        max_retries=3  # 添加重试机制
+        max_retries=3,  # 添加重试机制
+        presence_penalty=0.1,  # 添加存在惩罚以减少重复
+        frequency_penalty=0.1  # 添加频率惩罚以减少重复
     )
     
     return llm
@@ -289,11 +291,16 @@ def simplify_content(content, direction, st_container=None):
 7. 如果文档包含图片，请描述图片的内容和位置
 8. 请确保输出格式清晰，使用适当的标题和列表
 9. 如果遇到无法理解的内容，请保持原文
+10. 不要重复输出相同的内容
+11. 不要生成无意义的重复文本
+12. 保持输出的简洁性和可读性
 
 研究方向: {direction}
 
 文档内容:
-{clean_content}"""
+{clean_content}
+
+请按照以上要求分析文档内容，生成结构化的分析结果。"""
         
         prompt = PromptTemplate(
             template=template,
@@ -324,6 +331,11 @@ def simplify_content(content, direction, st_container=None):
             st.write("3. API调用可能出现了问题")
             st.write("4. 文档内容可能包含特殊字符或格式")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
+        
+        # 检查结果是否包含重复内容
+        if len(set(result.split())) < len(result.split()) * 0.3:  # 如果超过70%的内容是重复的
+            st.error("检测到输出内容存在大量重复")
+            return "AI分析生成了重复的内容。请检查文档内容或调整提示词设置。"
         
         # 记录生成结果的长度
         st.write(f"生成的分析结果长度: {len(result)} 字符")
