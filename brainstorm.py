@@ -274,6 +274,8 @@ def simplify_content(content, direction, st_container=None):
     try:
         # 记录日志，确认内容长度
         st.write(f"准备分析的内容总长度: {len(content)} 字符")
+        st.write("内容预览（前500字符）:")
+        st.write(content[:500])
         
         # 检查内容是否有效
         if not content or len(content.strip()) < 10:
@@ -295,6 +297,8 @@ def simplify_content(content, direction, st_container=None):
         
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
+        st.write("清理后的内容预览（前500字符）:")
+        st.write(clean_content[:500])
         
         # 简化提示模板
         template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
@@ -308,11 +312,14 @@ def simplify_content(content, direction, st_container=None):
 4. 避免重复内容
 5. 保持简洁明了
 6. 不要限制输出长度，确保完整分析所有内容
+7. 如果文档包含表格，请保留表格的结构和内容
+8. 如果文档包含图片，请描述图片的内容和位置
+9. 确保输出包含所有重要信息，不要遗漏任何关键内容
 
 文档内容:
 {clean_content}
 
-请生成结构化的分析结果。"""
+请生成结构化的分析结果，确保完整分析所有内容。"""
         
         prompt = PromptTemplate(
             template=template,
@@ -326,6 +333,7 @@ def simplify_content(content, direction, st_container=None):
         with st.spinner("正在分析文档内容..."):
             try:
                 result = chain.run(direction=direction, clean_content=clean_content)
+                st.write("API调用成功，正在处理结果...")
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用备用模型...")
@@ -346,6 +354,8 @@ def simplify_content(content, direction, st_container=None):
         
         # 记录生成结果的长度
         st.write(f"生成的分析结果长度: {len(result)} 字符")
+        st.write("结果预览（前500字符）:")
+        st.write(result[:500])
         
         return result
     except Exception as e:
