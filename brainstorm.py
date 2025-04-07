@@ -260,29 +260,19 @@ def simplify_content(content, direction, st_container=None):
         # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
         
-        # 如果内容太长，只保留重要部分
-        max_tokens = 8000  # 设置一个合理的上限
-        if len(clean_content) > max_tokens:
-            st.info(f"文档内容较长 ({len(clean_content)} 字符)，将进行截断处理...")
-            # 截取文档的前半部分和后半部分的关键内容
-            first_part = clean_content[:int(max_tokens * 0.7)]  # 前70%
-            last_part = clean_content[-int(max_tokens * 0.3):]  # 后30%
-            clean_content = first_part + "\n\n[...内容过长，已省略中间部分...]\n\n" + last_part
-            st.write(f"截断后的内容长度: {len(clean_content)} 字符")
-        
-        # 增强提示模板，更明确指出这是问卷分析
+        # 增强提示模板，使其更通用
         template = f"""{backstory}
 
 {task}
 
 {output_format}
 
-注意：
-1. 这是一份研究生个人陈述问卷调查，请提取申请者的关键信息和经历
+重要要求:
+1. 请仔细分析文档内容，提取所有关键信息
 2. 重点关注与研究方向"{direction}"相关的内容
-3. 注意识别申请者的兴趣、技能、教育背景和研究经历
-4. 输出应为简明扼要的要点，方便后续分析
-5. 提供对申请者优势和潜力的客观评价
+3. 注意识别文档中的主要观点、论据和结论
+4. 输出应为简明扼要的要点，保持原文的层次结构
+5. 确保不遗漏任何重要信息
 
 研究方向: {direction}
 
