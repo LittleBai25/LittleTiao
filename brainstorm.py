@@ -72,7 +72,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         openai_api_base=api_base,
         streaming=stream,
         temperature=temperature,
-        max_tokens=4000,
+        max_tokens=2000,  # 减少输出长度限制
         callbacks=callbacks,
         request_timeout=60,  # 增加超时时间到60秒
         max_retries=3,  # 添加重试机制
@@ -247,6 +247,28 @@ def process_file(file_path, file_type):
         return error_msg
 
 # 简化文件内容
+def chunk_content(content, chunk_size=8000):
+    """将内容分块处理"""
+    words = content.split()
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    
+    for word in words:
+        word_size = len(word) + 1  # +1 for space
+        if current_size + word_size > chunk_size:
+            chunks.append(' '.join(current_chunk))
+            current_chunk = [word]
+            current_size = word_size
+        else:
+            current_chunk.append(word)
+            current_size += word_size
+    
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    
+    return chunks
+
 def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
     try:
@@ -274,8 +296,17 @@ def simplify_content(content, direction, st_container=None):
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
-        # 简化提示模板
-        template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
+        # 将内容分块
+        chunks = chunk_content(clean_content)
+        st.write(f"文档被分成 {len(chunks)} 个部分进行处理")
+        
+        all_results = []
+        
+        # 处理每个块
+        for i, chunk in enumerate(chunks, 1):
+            with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
+                # 简化提示模板
+                template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
 
@@ -285,51 +316,40 @@ def simplify_content(content, direction, st_container=None):
 3. 使用清晰的标题和列表
 4. 避免重复内容
 5. 保持简洁明了
+6. 这是文档的第 {i} 部分，请专注于这部分内容
 
 文档内容:
-{clean_content}
+{chunk}
 
 请生成结构化的分析结果。"""
-        
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=["direction", "clean_content"]
-        )
-        
-        # 创建LLMChain
-        chain = LLMChain(llm=llm, prompt=prompt)
-        
-        # 执行链 - 使用更明确的参数名称
-        with st.spinner("正在分析文档内容..."):
-            try:
-                result = chain.run(direction=direction, clean_content=clean_content)
-            except Exception as e:
-                st.error(f"API调用失败: {str(e)}")
-                st.write("正在尝试使用备用模型...")
-                # 尝试使用备用模型
-                llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
+                
+                prompt = PromptTemplate(
+                    template=template,
+                    input_variables=["direction", "chunk"]
+                )
+                
+                # 创建LLMChain
                 chain = LLMChain(llm=llm, prompt=prompt)
-                result = chain.run(direction=direction, clean_content=clean_content)
+                
+                try:
+                    result = chain.run(direction=direction, chunk=chunk)
+                    if result and len(result.strip()) > 10:
+                        all_results.append(result)
+                except Exception as e:
+                    st.error(f"处理第 {i} 部分时出错: {str(e)}")
+                    continue
         
-        # 检查结果是否有效
-        if not result or len(result.strip()) < 10:
-            st.error("AI分析未能生成有效结果")
-            st.write("可能的原因：")
-            st.write("1. 文档内容可能过于复杂或格式特殊")
-            st.write("2. 研究方向描述可能不够明确")
-            st.write("3. API调用可能出现了问题")
-            st.write("4. 文档内容可能包含特殊字符或格式")
+        # 合并所有结果
+        if not all_results:
+            st.error("未能生成任何有效结果")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
-        # 检查结果是否包含重复内容
-        if len(set(result.split())) < len(result.split()) * 0.3:  # 如果超过70%的内容是重复的
-            st.error("检测到输出内容存在大量重复")
-            return "AI分析生成了重复的内容。请检查文档内容或调整提示词设置。"
+        final_result = "\n\n".join(all_results)
         
         # 记录生成结果的长度
-        st.write(f"生成的分析结果长度: {len(result)} 字符")
+        st.write(f"生成的分析结果长度: {len(final_result)} 字符")
         
-        return result
+        return final_result
     except Exception as e:
         st.error(f"分析过程中发生错误: {str(e)}")
         st.write("错误详情：")
