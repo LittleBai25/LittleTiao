@@ -246,7 +246,7 @@ def process_file(file_path, file_type):
         return error_msg
 
 # 简化文件内容
-def split_into_paragraphs(content, max_tokens=8000):
+def split_into_paragraphs(content, max_tokens=4000):
     """将内容按段落分割，保持语义完整性"""
     # 首先按段落分割
     paragraphs = content.split('\n\n')
@@ -255,6 +255,11 @@ def split_into_paragraphs(content, max_tokens=8000):
     current_size = 0
     
     for para in paragraphs:
+        # 清理段落内容
+        para = para.strip()
+        if not para:
+            continue
+            
         # 估算段落token数（粗略估算：1个token约等于4个字符）
         para_size = len(para) // 4
         
@@ -266,6 +271,10 @@ def split_into_paragraphs(content, max_tokens=8000):
             current_sentences_size = 0
             
             for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                    
                 sentence_size = len(sentence) // 4
                 if current_sentences_size + sentence_size > max_tokens and current_sentences:
                     chunks.append(' '.join(current_sentences))
@@ -303,15 +312,11 @@ def simplify_content(content, direction, st_container=None):
         # 获取API客户端 - 使用带有备用方案的流式输出
         llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
         
-        # 从会话状态获取提示词
-        backstory = st.session_state.material_backstory_prompt
-        task = st.session_state.material_task_prompt
-        output_format = st.session_state.material_output_prompt
-        
         # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
         clean_content = clean_content.replace('\x00', '')  # 移除空字符
         clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
+        clean_content = re.sub(r'[^\w\s.,;:!?()\-\n]', '', clean_content)  # 移除特殊字符
         
         # 将内容分块
         chunks = split_into_paragraphs(clean_content)
@@ -321,23 +326,22 @@ def simplify_content(content, direction, st_container=None):
         for i, chunk in enumerate(chunks, 1):
             with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
                 # 简化提示模板
-                template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
+                template = f"""分析文档内容，提取关键信息。
 
-研究方向: {direction}
+方向: {direction}
 
 要求:
-1. 提取与研究方向相关的关键信息
-2. 保持原文的层次结构
-3. 使用清晰的标题和列表
-4. 避免重复内容
-5. 保持简洁明了
-6. 这是文档的第 {i} 部分，请专注于这部分内容
-7. 注意与前后文的连贯性
+1. 提取相关信息
+2. 保持结构
+3. 使用标题和列表
+4. 避免重复
+5. 保持简洁
+6. 这是第 {i} 部分
 
-文档内容:
+内容:
 {chunk}
 
-请生成结构化的分析结果。"""
+请生成分析结果。"""
                 
                 prompt = PromptTemplate(
                     template=template,
@@ -361,12 +365,12 @@ def simplify_content(content, direction, st_container=None):
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 使用LLM合并结果
-        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
+        merge_template = """合并以下分析结果，保持结构和格式，去除重复。
 
-分析结果:
+结果:
 {results}
 
-请生成一个完整的、结构化的分析报告。"""
+请生成完整报告。"""
         
         merge_prompt = PromptTemplate(
             template=merge_template,
