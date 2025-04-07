@@ -47,12 +47,12 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "anthropic/claude-3-haiku")
+        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
         temperature = 0.1  # 降低温度以获得更稳定的输出
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "anthropic/claude-3-sonnet")
+        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
         temperature = 0.3  # 降低温度以获得更稳定的输出
         
     # 检查API密钥是否为空
@@ -274,33 +274,22 @@ def simplify_content(content, direction, st_container=None):
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
-        # 增强提示模板，使其更通用
-        template = f"""{backstory}
-
-{task}
-
-{output_format}
-
-重要要求:
-1. 请仔细分析文档内容，提取所有关键信息
-2. 重点关注与研究方向"{direction}"相关的内容
-3. 注意识别文档中的主要观点、论据和结论
-4. 输出应为简明扼要的要点，保持原文的层次结构
-5. 确保不遗漏任何重要信息
-6. 如果文档包含表格，请保留表格的结构和内容
-7. 如果文档包含图片，请描述图片的内容和位置
-8. 请确保输出格式清晰，使用适当的标题和列表
-9. 如果遇到无法理解的内容，请保持原文
-10. 不要重复输出相同的内容
-11. 不要生成无意义的重复文本
-12. 保持输出的简洁性和可读性
+        # 简化提示模板
+        template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
+
+要求:
+1. 提取与研究方向相关的关键信息
+2. 保持原文的层次结构
+3. 使用清晰的标题和列表
+4. 避免重复内容
+5. 保持简洁明了
 
 文档内容:
 {clean_content}
 
-请按照以上要求分析文档内容，生成结构化的分析结果。"""
+请生成结构化的分析结果。"""
         
         prompt = PromptTemplate(
             template=template,
