@@ -304,9 +304,12 @@ def simplify_content(content, direction, st_container=None):
         # 执行API调用
         with st.spinner("正在分析文档内容..."):
             try:
-                response = client.create(
+                response = client.chat.completions.create(
                     model=model_name,
-                    prompt=prompt,
+                    messages=[
+                        {"role": "system", "content": "你是一个专业的文档分析助手。"},
+                        {"role": "user", "content": prompt}
+                    ],
                     temperature=temperature,
                     stream=True
                 )
@@ -314,8 +317,8 @@ def simplify_content(content, direction, st_container=None):
                 # 处理流式响应
                 result = ""
                 for chunk in response:
-                    if chunk.choices[0].text is not None:
-                        content = chunk.choices[0].text
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
                         result += content
                         if st_container:
                             st_container.write(content)
@@ -328,24 +331,30 @@ def simplify_content(content, direction, st_container=None):
                     if len(result.strip()) < len(clean_content) * 0.1:  # 如果结果太短
                         st.warning("输出结果可能不完整，正在重试...")
                         # 使用非流式输出重试
-                        response = client.create(
+                        response = client.chat.completions.create(
                             model=model_name,
-                            prompt=prompt,
+                            messages=[
+                                {"role": "system", "content": "你是一个专业的文档分析助手。"},
+                                {"role": "user", "content": prompt}
+                            ],
                             temperature=temperature,
                             stream=False
                         )
-                        result = response.choices[0].text
+                        result = response.choices[0].message.content
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用非流式输出...")
                 # 尝试使用非流式输出
-                response = client.create(
+                response = client.chat.completions.create(
                     model=model_name,
-                    prompt=prompt,
+                    messages=[
+                        {"role": "system", "content": "你是一个专业的文档分析助手。"},
+                        {"role": "user", "content": prompt}
+                    ],
                     temperature=temperature,
                     stream=False
                 )
-                result = response.choices[0].text
+                result = response.choices[0].message.content
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
