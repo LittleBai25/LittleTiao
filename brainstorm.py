@@ -4,6 +4,7 @@ import tempfile
 import re
 from pathlib import Path
 import io
+import time
 
 # 导入基本依赖
 try:
@@ -74,10 +75,11 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
             streaming=stream,
             temperature=temperature,
             callbacks=callbacks,
-            request_timeout=120,  # 增加超时时间到120秒
+            request_timeout=300,  # 增加超时时间到300秒
             max_retries=3,  # 添加重试机制
             presence_penalty=0.1,  # 添加存在惩罚以减少重复
-            frequency_penalty=0.1  # 添加频率惩罚以减少重复
+            frequency_penalty=0.1,  # 添加频率惩罚以减少重复
+            max_tokens=None  # 移除token限制
         )
         
         return llm
@@ -312,6 +314,8 @@ def simplify_content(content, direction, st_container=None):
 5. 保持简洁明了
 6. 如果文档包含表格，请保留表格的结构和内容
 7. 如果文档包含图片，请描述图片的内容和位置
+8. 请确保输出完整，不要中途截断
+9. 如果内容较长，请分节处理，但确保完整性
 
 文档内容:
 {clean_content}
@@ -330,6 +334,17 @@ def simplify_content(content, direction, st_container=None):
         with st.spinner("正在分析文档内容..."):
             try:
                 result = chain.run(direction=direction, clean_content=clean_content)
+                # 检查结果是否完整
+                if result and len(result.strip()) > 0:
+                    # 等待一段时间确保输出完成
+                    time.sleep(5)
+                    # 再次检查结果
+                    if len(result.strip()) < len(clean_content) * 0.1:  # 如果结果太短
+                        st.warning("输出结果可能不完整，正在重试...")
+                        # 使用非流式输出重试
+                        llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
+                        chain = LLMChain(llm=llm, prompt=prompt)
+                        result = chain.run(direction=direction, clean_content=clean_content)
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用备用模型...")
