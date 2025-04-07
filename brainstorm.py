@@ -366,13 +366,19 @@ def simplify_content(content, direction, st_container=None):
                     result = chain.run(direction=direction, chunk=chunk)
                     if result and len(result.strip()) > 10:
                         all_results.append(result)
+                    else:
+                        st.warning(f"第 {i} 部分生成的结果为空或过短")
                 except Exception as e:
                     st.error(f"处理第 {i} 部分时出错: {str(e)}")
                     continue
         
-        # 合并所有结果
+        # 检查是否有有效结果
         if not all_results:
             st.error("未能生成有效结果")
+            st.info("可能的原因：")
+            st.info("1. 文档内容与研究方向不相关")
+            st.info("2. 提示词设置可能需要调整")
+            st.info("3. API调用可能失败")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 使用LLM合并结果
