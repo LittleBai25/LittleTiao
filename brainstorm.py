@@ -339,20 +339,22 @@ def simplify_content(content, direction, st_container=None):
 
 {output_format}
 
-方向: {direction}
+研究方向: {direction}
 
 要求:
-1. 提取相关信息
-2. 保持结构
-3. 使用标题和列表
-4. 避免重复
-5. 保持简洁
-6. 这是第 {i} 部分
+1. 仔细阅读并理解文档内容
+2. 提取与研究方向"{direction}"相关的所有关键信息
+3. 保持原文的层次结构和逻辑关系
+4. 使用清晰的标题和列表组织内容
+5. 避免重复内容，保持简洁明了
+6. 这是文档的第 {i} 部分，请专注于这部分内容
+7. 注意与前后文的连贯性
+8. 如果内容与研究方向无关，请明确指出
 
-内容:
+文档内容:
 {chunk}
 
-请生成分析结果。"""
+请生成结构化的分析结果。如果内容与研究方向无关，请说明原因。"""
                 
                 prompt = PromptTemplate(
                     template=template,
@@ -368,8 +370,10 @@ def simplify_content(content, direction, st_container=None):
                         all_results.append(result)
                     else:
                         st.warning(f"第 {i} 部分生成的结果为空或过短")
+                        st.info(f"内容预览: {chunk[:200]}...")
                 except Exception as e:
                     st.error(f"处理第 {i} 部分时出错: {str(e)}")
+                    st.info(f"内容预览: {chunk[:200]}...")
                     continue
         
         # 检查是否有有效结果
@@ -379,15 +383,21 @@ def simplify_content(content, direction, st_container=None):
             st.info("1. 文档内容与研究方向不相关")
             st.info("2. 提示词设置可能需要调整")
             st.info("3. API调用可能失败")
+            st.info("4. 内容分块可能过小，导致上下文不完整")
+            st.info("5. 研究方向描述可能不够明确")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 使用LLM合并结果
-        merge_template = """合并以下分析结果，保持结构和格式，去除重复。
+        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
 
-结果:
+分析结果:
 {results}
 
-请生成完整报告。"""
+请生成一个完整的、结构化的分析报告。确保：
+1. 保持清晰的层次结构
+2. 去除重复内容
+3. 确保各部分之间的连贯性
+4. 突出与研究方向相关的关键信息"""
         
         merge_prompt = PromptTemplate(
             template=merge_template,
