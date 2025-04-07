@@ -47,17 +47,20 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
+        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "")
         temperature = 0.1  # 降低温度以获得更稳定的输出
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
+        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "")
         temperature = 0.3  # 降低温度以获得更稳定的输出
         
-    # 检查API密钥是否为空
+    # 检查API密钥和模型名称是否为空
     if not api_key:
         st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
+        st.stop()
+    if not model_name:
+        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} 模型未设置！请在secrets.toml中配置。")
         st.stop()
     
     # 设置回调处理器
@@ -73,7 +76,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         streaming=stream,
         temperature=temperature,
         callbacks=callbacks,
-        request_timeout=60,  # 增加超时时间到60秒
+        request_timeout=120,  # 增加超时时间到120秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
         frequency_penalty=0.1  # 添加频率惩罚以减少重复
@@ -246,7 +249,7 @@ def process_file(file_path, file_type):
         return error_msg
 
 # 简化文件内容
-def split_into_paragraphs(content, max_tokens=15000):
+def split_into_paragraphs(content, max_tokens=3000):
     """将内容按段落分割，保持语义完整性"""
     # 首先按段落分割
     paragraphs = content.split('\n\n')
@@ -336,21 +339,20 @@ def simplify_content(content, direction, st_container=None):
 
 {output_format}
 
-研究方向: {direction}
+方向: {direction}
 
 要求:
-1. 提取与研究方向相关的关键信息
-2. 保持原文的层次结构
-3. 使用清晰的标题和列表
-4. 避免重复内容
-5. 保持简洁明了
-6. 这是文档的第 {i} 部分，请专注于这部分内容
-7. 注意与前后文的连贯性
+1. 提取相关信息
+2. 保持结构
+3. 使用标题和列表
+4. 避免重复
+5. 保持简洁
+6. 这是第 {i} 部分
 
-文档内容:
+内容:
 {chunk}
 
-请生成结构化的分析结果。"""
+请生成分析结果。"""
                 
                 prompt = PromptTemplate(
                     template=template,
@@ -374,12 +376,12 @@ def simplify_content(content, direction, st_container=None):
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 使用LLM合并结果
-        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
+        merge_template = """合并以下分析结果，保持结构和格式，去除重复。
 
-分析结果:
+结果:
 {results}
 
-请生成一个完整的、结构化的分析报告。"""
+请生成完整报告。"""
         
         merge_prompt = PromptTemplate(
             template=merge_template,
