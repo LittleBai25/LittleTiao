@@ -76,7 +76,8 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         request_timeout=60,  # 增加超时时间到60秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1  # 添加频率惩罚以减少重复
+        frequency_penalty=0.1,  # 添加频率惩罚以减少重复
+        max_tokens=None  # 明确设置为None，表示不限制token
     )
     
     return llm
@@ -306,6 +307,7 @@ def simplify_content(content, direction, st_container=None):
 3. 使用清晰的标题和列表
 4. 避免重复内容
 5. 保持简洁明了
+6. 不要限制输出长度，确保完整分析所有内容
 
 文档内容:
 {clean_content}
