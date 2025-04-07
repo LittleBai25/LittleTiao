@@ -330,9 +330,16 @@ def simplify_content(content, direction, st_container=None):
         clean_content = clean_content.replace('\x00', '')  # 移除空字符
         clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
         
+        # 显示调试信息
+        st.info(f"研究方向: {direction}")
+        st.info(f"文档长度: {len(clean_content)} 字符")
+        st.info(f"提示词设置:")
+        st.info(f"- Backstory: {backstory}")
+        st.info(f"- Task: {task}")
+        st.info(f"- Output Format: {output_format}")
+        
         # 创建进度条
         progress_bar = st.progress(0)
-        st.info(f"文档总长度约为 {len(clean_content)} 字符 (约 {len(clean_content) // 4} tokens)")
         
         # 尝试两种模式：不分块或适度分块
         try_modes = ['no_chunks', 'few_chunks']
@@ -361,6 +368,7 @@ def simplify_content(content, direction, st_container=None):
 4. 使用清晰的标题和列表组织内容
 5. 避免重复内容，保持简洁明了
 6. 如果内容与研究方向无关，请明确指出
+7. 请确保输出内容至少包含3个要点
 
 文档内容:
 {clean_content}
@@ -384,6 +392,7 @@ def simplify_content(content, direction, st_container=None):
                             break  # 如果成功处理，跳出循环
                         else:
                             st.warning("处理整个文档未能生成有效结果，尝试使用适度分块...")
+                            st.info(f"生成的结果: {result[:200] if result else '无结果'}")
                     except Exception as e:
                         st.warning(f"尝试不分块处理时出错: {str(e)}")
                         st.info("将尝试使用适度分块...")
@@ -419,6 +428,7 @@ def simplify_content(content, direction, st_container=None):
 5. 避免重复内容，保持简洁明了
 6. 这是文档的第 {i} 部分，请专注于这部分内容
 7. 如果内容与研究方向无关，请明确指出
+8. 请确保输出内容至少包含3个要点
 
 文档内容:
 {chunk}
@@ -455,7 +465,7 @@ def simplify_content(content, direction, st_container=None):
 结果:
 {results}
 
-请生成完整报告。"""
+请生成完整报告，确保包含至少3个主要要点。"""
                         
                         merge_prompt = PromptTemplate(
                             template=merge_template,
@@ -484,6 +494,7 @@ def simplify_content(content, direction, st_container=None):
             st.info("3. API调用可能失败")
             st.info("4. 研究方向描述可能不够明确")
             st.info("5. 文档内容可能过于复杂或格式不适合处理")
+            st.info("6. 模型输出被截断或未完成")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         return result
