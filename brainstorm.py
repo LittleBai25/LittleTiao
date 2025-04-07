@@ -41,49 +41,49 @@ st.set_page_config(
 # 设置API客户端
 def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     """根据不同的模型类型设置API客户端"""
-    # 使用OpenRouter API
-    api_base = "https://openrouter.ai/api/v1"
-    
-    if model_type == "simplify":
-        # 素材分析使用的API密钥和模型
-        api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        model_name = "deepseek/deepseek-chat-v3-0324:free"  # 使用deepseek模型
-        temperature = 0.1  # 降低温度以获得更稳定的输出
-    else:  # analysis
-        # 脑暴报告使用的API密钥和模型
-        api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        model_name = "deepseek/deepseek-chat-v3-0324:free"  # 使用deepseek模型
-        temperature = 0.3  # 降低温度以获得更稳定的输出
-        
-    # 检查API密钥是否为空
-    if not api_key:
-        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
-        st.stop()
-    
-    # 设置回调处理器
-    callbacks = None
-    if stream and st_container:
-        callbacks = [StreamlitCallbackHandler(st_container)]
-    
     try:
-        # 创建LangChain LLM客户端 - 完全移除所有限制
+        # 使用OpenRouter API
+        api_base = "https://openrouter.ai/api/v1"
+        
+        if model_type == "simplify":
+            # 素材分析使用的API密钥和模型
+            api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
+            model_name = "deepseek/deepseek-chat-v3-0324:free"  # 使用deepseek模型
+            temperature = 0.1  # 降低温度以获得更稳定的输出
+        else:  # analysis
+            # 脑暴报告使用的API密钥和模型
+            api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
+            model_name = "deepseek/deepseek-chat-v3-0324:free"  # 使用deepseek模型
+            temperature = 0.3  # 降低温度以获得更稳定的输出
+        
+        # 检查API密钥是否为空
+        if not api_key:
+            st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
+            st.stop()
+        
+        # 设置回调处理器
+        callbacks = None
+        if stream and st_container:
+            callbacks = [StreamlitCallbackHandler(st_container)]
+        
+        # 创建LangChain LLM客户端 - 简化配置
+        llm = OpenAI(
+            model_name=model_name,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
             streaming=stream,
             temperature=temperature,
-    # 创建LangChain LLM客户端 - 简化配置
-    llm = OpenAI(
-        model_name=model_name,
-        openai_api_key=api_key,
-        openai_api_base=api_base,
-        streaming=stream,
-        temperature=temperature,
-        callbacks=callbacks,
-        request_timeout=120,  # 增加超时时间到120秒
-        max_retries=3,  # 添加重试机制
-        presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1  # 添加频率惩罚以减少重复
-    )
-    
-    return llm
+            callbacks=callbacks,
+            request_timeout=120,  # 增加超时时间到120秒
+            max_retries=3,  # 添加重试机制
+            presence_penalty=0.1,  # 添加存在惩罚以减少重复
+            frequency_penalty=0.1  # 添加频率惩罚以减少重复
+        )
+        
+        return llm
+    except Exception as e:
+        st.error(f"创建LLM客户端时出错: {str(e)}")
+        st.stop()
 
 # 文件处理函数
 def process_file(file_path, file_type):
