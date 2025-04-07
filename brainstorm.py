@@ -67,53 +67,23 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     
     try:
         # 创建LangChain LLM客户端 - 完全移除所有限制
-        llm = OpenAI(
-            model_name=model_name,
-            openai_api_key=api_key,
-            openai_api_base=api_base,
             streaming=stream,
             temperature=temperature,
-            callbacks=callbacks,
-            request_timeout=120,  # 增加超时时间到120秒
-            max_retries=5,  # 增加重试次数
-            presence_penalty=0,  # 移除存在惩罚
-            frequency_penalty=0,  # 移除频率惩罚
-            max_tokens=None,  # 明确设置为None，表示不限制token
-            top_p=1.0,  # 允许所有可能的token
-            best_of=1,  # 使用最佳结果
-            n=1,  # 只生成一个结果
-            logit_bias={},  # 不设置任何token偏见
-            stop=None  # 不设置停止条件
-        )
-        
-        # 测试API连接 - 使用generate方法而不是predict
-        test_prompt = "Hello, this is a test."
-        try:
-            test_response = llm.generate([test_prompt])
-            if not test_response or not test_response.generations:
-                raise Exception("API测试响应为空")
-            st.write("API连接测试成功")
-        except Exception as e:
-            st.error(f"API连接测试失败: {str(e)}")
-            st.write("正在尝试使用备用配置...")
-            # 尝试使用备用配置
-            llm = OpenAI(
-                model_name=model_name,
-                openai_api_key=api_key,
-                openai_api_base=api_base,
-                streaming=False,  # 禁用流式输出
-                temperature=temperature,
-                request_timeout=180,  # 进一步增加超时时间
-                max_retries=10,  # 增加重试次数
-                max_tokens=None
-            )
-        
-        return llm
-    except Exception as e:
-        st.error(f"创建LLM客户端时出错: {str(e)}")
-        st.write("错误详情：")
-        st.write(str(e))
-        st.stop()
+    # 创建LangChain LLM客户端 - 简化配置
+    llm = OpenAI(
+        model_name=model_name,
+        openai_api_key=api_key,
+        openai_api_base=api_base,
+        streaming=stream,
+        temperature=temperature,
+        callbacks=callbacks,
+        request_timeout=120,  # 增加超时时间到120秒
+        max_retries=3,  # 添加重试机制
+        presence_penalty=0.1,  # 添加存在惩罚以减少重复
+        frequency_penalty=0.1  # 添加频率惩罚以减少重复
+    )
+    
+    return llm
 
 # 文件处理函数
 def process_file(file_path, file_type):
@@ -307,8 +277,6 @@ def simplify_content(content, direction, st_container=None):
     try:
         # 记录日志，确认内容长度
         st.write(f"准备分析的内容总长度: {len(content)} 字符")
-        st.write("内容预览（前500字符）:")
-        st.write(content[:500])
         
         # 检查内容是否有效
         if not content or len(content.strip()) < 10:
@@ -330,40 +298,25 @@ def simplify_content(content, direction, st_container=None):
         
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
-        st.write("清理后的内容预览（前500字符）:")
-        st.write(clean_content[:500])
         
-        # 构建完整的提示词模板
-        template = f"""{backstory}
-
-{task}
-
-{output_format}
-
-重要要求:
-1. 你必须详细分析文档的每一部分内容，不要遗漏任何细节
-2. 提取所有与研究方向相关的信息，包括隐含的信息
-3. 保持原文的层次结构，使用清晰的标题和列表
-4. 如果文档包含表格，必须完整保留表格的结构和内容
-5. 如果文档包含图片，必须详细描述图片的内容和位置
-6. 输出必须包含以下部分：
-   - 文档概述（详细说明文档的主要内容和结构）
-   - 关键发现（列出所有重要的发现和见解）
-   - 具体细节（详细分析每个重要部分）
-   - 相关表格内容（完整保留和解释所有表格）
-   - 相关图片描述（详细描述所有图片及其重要性）
-   - 总结和建议（提供全面的总结和具体建议）
-7. 每个部分都必须详细展开，提供充分的解释和分析
-8. 不要限制输出长度，确保完整分析所有内容
-9. 不要遗漏任何重要信息，包括看似次要的细节
-10. 如果遇到不确定的内容，请明确标注并说明原因
+        # 简化提示模板
+        template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
+
+要求:
+1. 提取与研究方向相关的关键信息
+2. 保持原文的层次结构
+3. 使用清晰的标题和列表
+4. 避免重复内容
+5. 保持简洁明了
+6. 如果文档包含表格，请保留表格的结构和内容
+7. 如果文档包含图片，请描述图片的内容和位置
 
 文档内容:
 {clean_content}
 
-请按照上述要求生成详细的分析结果。输出必须包含所有要求的部分，并且每个部分都要详细展开。不要限制输出长度，确保完整分析所有内容。"""
+请生成结构化的分析结果。"""
         
         prompt = PromptTemplate(
             template=template,
@@ -376,26 +329,14 @@ def simplify_content(content, direction, st_container=None):
         # 执行链 - 使用更明确的参数名称
         with st.spinner("正在分析文档内容..."):
             try:
-                # 记录API调用开始
-                st.write("开始API调用...")
                 result = chain.run(direction=direction, clean_content=clean_content)
-                st.write("API调用成功，正在处理结果...")
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
-                st.write("错误详情：")
-                st.write(str(e))
                 st.write("正在尝试使用备用模型...")
                 # 尝试使用备用模型
                 llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
                 chain = LLMChain(llm=llm, prompt=prompt)
-                try:
-                    result = chain.run(direction=direction, clean_content=clean_content)
-                    st.write("备用模型调用成功")
-                except Exception as e2:
-                    st.error(f"备用模型调用也失败: {str(e2)}")
-                    st.write("错误详情：")
-                    st.write(str(e2))
-                    return "AI分析失败。请检查API密钥是否正确，或稍后重试。"
+                result = chain.run(direction=direction, clean_content=clean_content)
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
@@ -405,14 +346,10 @@ def simplify_content(content, direction, st_container=None):
             st.write("2. 研究方向描述可能不够明确")
             st.write("3. API调用可能出现了问题")
             st.write("4. 文档内容可能包含特殊字符或格式")
-            st.write("5. API密钥可能无效或过期")
-            st.write("6. 网络连接可能不稳定")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 记录生成结果的长度
         st.write(f"生成的分析结果长度: {len(result)} 字符")
-        st.write("结果预览（前500字符）:")
-        st.write(result[:500])
         
         return result
     except Exception as e:
