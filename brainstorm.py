@@ -62,29 +62,15 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
             st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
             st.stop()
         
-        # 设置回调处理器
-        callbacks = None
-        if stream and st_container:
-            callbacks = [StreamlitCallbackHandler(st_container)]
-        
-        # 创建LangChain LLM客户端
-        llm = OpenAI(
-            model_name=model_name,
-            openai_api_key=api_key,
-            openai_api_base=api_base,
-            streaming=stream,
-            temperature=temperature,
-            callbacks=callbacks,
-            request_timeout=300,  # 增加超时时间到300秒
-            max_retries=3,  # 添加重试机制
-            presence_penalty=0.1,  # 添加存在惩罚以减少重复
-            frequency_penalty=0.1,  # 添加频率惩罚以减少重复
-            max_tokens=None  # 移除token限制
+        # 创建OpenRouter客户端
+        client = OpenAI(
+            api_key=api_key,
+            base_url=api_base
         )
         
-        return llm
+        return client, model_name, temperature
     except Exception as e:
-        st.error(f"创建LLM客户端时出错: {str(e)}")
+        st.error(f"创建API客户端时出错: {str(e)}")
         st.stop()
 
 # 文件处理函数
@@ -285,8 +271,8 @@ def simplify_content(content, direction, st_container=None):
             st.error("文档内容过短或为空")
             return "文档内容过短或为空，请检查上传的文件是否正确"
         
-        # 获取API客户端 - 使用带有备用方案的流式输出
-        llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+        # 获取API客户端
+        client, model_name, temperature = get_langchain_llm("simplify", stream=True, st_container=st_container)
         
         # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
@@ -314,17 +300,25 @@ def simplify_content(content, direction, st_container=None):
 {clean_content}
 
 请生成结构化的分析结果。"""
-
-        # 创建LLMChain
-        chain = LLMChain(llm=llm, prompt=PromptTemplate(
-            template=prompt,
-            input_variables=[]
-        ))
         
-        # 执行链
+        # 执行API调用
         with st.spinner("正在分析文档内容..."):
             try:
-                result = chain.run({})
+                response = client.completions.create(
+                    model=model_name,
+                    prompt=prompt,
+                    temperature=temperature,
+                    stream=True
+                )
+                
+                # 处理流式响应
+                result = ""
+                for chunk in response:
+                    if chunk.choices[0].text is not None:
+                        content = chunk.choices[0].text
+                        result += content
+                        if st_container:
+                            st_container.write(content)
                 
                 # 检查结果是否完整
                 if result and len(result.strip()) > 0:
@@ -334,22 +328,24 @@ def simplify_content(content, direction, st_container=None):
                     if len(result.strip()) < len(clean_content) * 0.1:  # 如果结果太短
                         st.warning("输出结果可能不完整，正在重试...")
                         # 使用非流式输出重试
-                        llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
-                        chain = LLMChain(llm=llm, prompt=PromptTemplate(
-                            template=prompt,
-                            input_variables=[]
-                        ))
-                        result = chain.run({})
+                        response = client.completions.create(
+                            model=model_name,
+                            prompt=prompt,
+                            temperature=temperature,
+                            stream=False
+                        )
+                        result = response.choices[0].text
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
-                st.write("正在尝试使用备用模型...")
-                # 尝试使用备用模型
-                llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
-                chain = LLMChain(llm=llm, prompt=PromptTemplate(
-                    template=prompt,
-                    input_variables=[]
-                ))
-                result = chain.run({})
+                st.write("正在尝试使用非流式输出...")
+                # 尝试使用非流式输出
+                response = client.completions.create(
+                    model=model_name,
+                    prompt=prompt,
+                    temperature=temperature,
+                    stream=False
+                )
+                result = response.choices[0].text
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
