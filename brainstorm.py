@@ -65,7 +65,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = [StreamlitCallbackHandler(st_container)]
     
-    # 创建LangChain LLM客户端 - 简化配置
+    # 创建LangChain LLM客户端 - 使用completion模式
     llm = OpenAI(
         model_name=model_name,
         openai_api_key=api_key,
@@ -77,7 +77,8 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         request_timeout=60,  # 增加超时时间到60秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1  # 添加频率惩罚以减少重复
+        frequency_penalty=0.1,  # 添加频率惩罚以减少重复
+        model_kwargs={"mode": "completion"}  # 使用completion模式
     )
     
     return llm
@@ -272,9 +273,6 @@ def chunk_content(content, chunk_size=8000):
 def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
     try:
-        # 记录日志，确认内容长度
-        st.write(f"准备分析的内容总长度: {len(content)} 字符")
-        
         # 检查内容是否有效
         if not content or len(content.strip()) < 10:
             st.error("文档内容过短或为空")
@@ -293,20 +291,8 @@ def simplify_content(content, direction, st_container=None):
         clean_content = clean_content.replace('\x00', '')  # 移除空字符
         clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
         
-        # 记录清理后的内容长度
-        st.write(f"清理后的内容长度: {len(clean_content)} 字符")
-        
-        # 将内容分块
-        chunks = chunk_content(clean_content)
-        st.write(f"文档被分成 {len(chunks)} 个部分进行处理")
-        
-        all_results = []
-        
-        # 处理每个块
-        for i, chunk in enumerate(chunks, 1):
-            with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
-                # 简化提示模板
-                template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
+        # 简化提示模板
+        template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
 
@@ -316,44 +302,33 @@ def simplify_content(content, direction, st_container=None):
 3. 使用清晰的标题和列表
 4. 避免重复内容
 5. 保持简洁明了
-6. 这是文档的第 {i} 部分，请专注于这部分内容
 
 文档内容:
-{chunk}
+{clean_content}
 
 请生成结构化的分析结果。"""
-                
-                prompt = PromptTemplate(
-                    template=template,
-                    input_variables=["direction", "chunk"]
-                )
-                
-                # 创建LLMChain
-                chain = LLMChain(llm=llm, prompt=prompt)
-                
-                try:
-                    result = chain.run(direction=direction, chunk=chunk)
-                    if result and len(result.strip()) > 10:
-                        all_results.append(result)
-                except Exception as e:
-                    st.error(f"处理第 {i} 部分时出错: {str(e)}")
-                    continue
         
-        # 合并所有结果
-        if not all_results:
-            st.error("未能生成任何有效结果")
-            return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["direction", "clean_content"]
+        )
         
-        final_result = "\n\n".join(all_results)
+        # 创建LLMChain
+        chain = LLMChain(llm=llm, prompt=prompt)
         
-        # 记录生成结果的长度
-        st.write(f"生成的分析结果长度: {len(final_result)} 字符")
-        
-        return final_result
+        # 执行链
+        with st.spinner("正在分析文档内容..."):
+            try:
+                result = chain.run(direction=direction, clean_content=clean_content)
+                if not result or len(result.strip()) < 10:
+                    st.error("未能生成有效结果")
+                    return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
+                return result
+            except Exception as e:
+                st.error(f"分析过程中发生错误: {str(e)}")
+                return f"分析过程中发生错误: {str(e)}"
     except Exception as e:
         st.error(f"分析过程中发生错误: {str(e)}")
-        st.write("错误详情：")
-        st.write(str(e))
         return f"分析过程中发生错误: {str(e)}"
 
 # 生成分析报告
