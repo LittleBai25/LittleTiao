@@ -80,14 +80,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
         frequency_penalty=0.1,  # 添加频率惩罚以减少重复
-        max_tokens=4000,  # 设置最大输出token数
-        stop=None,  # 不设置停止条件，让模型完整输出
-        model_kwargs={
-            "headers": {
-                "HTTP-Referer": "https://github.com/your-repo",  # 替换为你的仓库地址
-                "X-Title": "Brainstorm Assistant"  # 你的应用名称
-            }
-        }
+        max_tokens=4000  # 设置最大输出token数
     )
     
     return llm
