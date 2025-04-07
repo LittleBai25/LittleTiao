@@ -296,21 +296,19 @@ def simplify_content(content, direction, st_container=None):
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
+        # 从会话状态获取提示词
+        backstory = st.session_state.material_backstory_prompt
+        task = st.session_state.material_task_prompt
+        output_format = st.session_state.material_output_prompt
+        
         # 构建提示词
-        prompt = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
+        prompt = f"""{backstory}
+
+{task}
+
+{output_format}
 
 研究方向: {direction}
-
-要求:
-1. 提取与研究方向相关的关键信息
-2. 保持原文的层次结构
-3. 使用清晰的标题和列表
-4. 避免重复内容
-5. 保持简洁明了
-6. 如果文档包含表格，请保留表格的结构和内容
-7. 如果文档包含图片，请描述图片的内容和位置
-8. 请确保输出完整，不要中途截断
-9. 如果内容较长，请分节处理，但确保完整性
 
 文档内容:
 {clean_content}
