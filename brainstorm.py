@@ -318,13 +318,13 @@ def simplify_content(content, direction, st_container=None):
         # 创建LLMChain
         chain = LLMChain(llm=llm, prompt=PromptTemplate(
             template=prompt,
-            input_variables=[]
+            input_variables=["direction", "clean_content"]  # 指定需要的输入变量
         ))
         
         # 执行链
         with st.spinner("正在分析文档内容..."):
             try:
-                result = chain.run({})
+                result = chain.run(direction=direction, clean_content=clean_content)  # 传入变量
                 
                 # 检查结果是否完整
                 if result and len(result.strip()) > 0:
@@ -337,9 +337,9 @@ def simplify_content(content, direction, st_container=None):
                         llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
                         chain = LLMChain(llm=llm, prompt=PromptTemplate(
                             template=prompt,
-                            input_variables=[]
+                            input_variables=["direction", "clean_content"]  # 指定需要的输入变量
                         ))
-                        result = chain.run({})
+                        result = chain.run(direction=direction, clean_content=clean_content)  # 传入变量
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用备用模型...")
@@ -347,9 +347,9 @@ def simplify_content(content, direction, st_container=None):
                 llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
                 chain = LLMChain(llm=llm, prompt=PromptTemplate(
                     template=prompt,
-                    input_variables=[]
+                    input_variables=["direction", "clean_content"]  # 指定需要的输入变量
                 ))
-                result = chain.run({})
+                result = chain.run(direction=direction, clean_content=clean_content)  # 传入变量
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
