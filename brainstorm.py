@@ -246,7 +246,7 @@ def process_file(file_path, file_type):
         return error_msg
 
 # 简化文件内容
-def split_into_paragraphs(content, max_tokens=15000):
+def split_into_paragraphs(content, max_tokens=8000):
     """将内容按段落分割，保持语义完整性"""
     # 首先按段落分割
     paragraphs = content.split('\n\n')
@@ -258,14 +258,33 @@ def split_into_paragraphs(content, max_tokens=15000):
         # 估算段落token数（粗略估算：1个token约等于4个字符）
         para_size = len(para) // 4
         
-        if current_size + para_size > max_tokens and current_chunk:
-            # 当前块已满，保存并开始新块
-            chunks.append('\n\n'.join(current_chunk))
-            current_chunk = [para]
-            current_size = para_size
+        # 如果单个段落就超过限制，需要进一步分割
+        if para_size > max_tokens:
+            # 按句子分割
+            sentences = re.split(r'[.!?。！？]+', para)
+            current_sentences = []
+            current_sentences_size = 0
+            
+            for sentence in sentences:
+                sentence_size = len(sentence) // 4
+                if current_sentences_size + sentence_size > max_tokens and current_sentences:
+                    chunks.append(' '.join(current_sentences))
+                    current_sentences = [sentence]
+                    current_sentences_size = sentence_size
+                else:
+                    current_sentences.append(sentence)
+                    current_sentences_size += sentence_size
+            
+            if current_sentences:
+                chunks.append(' '.join(current_sentences))
         else:
-            current_chunk.append(para)
-            current_size += para_size
+            if current_size + para_size > max_tokens and current_chunk:
+                chunks.append('\n\n'.join(current_chunk))
+                current_chunk = [para]
+                current_size = para_size
+            else:
+                current_chunk.append(para)
+                current_size += para_size
     
     # 添加最后一个块
     if current_chunk:
