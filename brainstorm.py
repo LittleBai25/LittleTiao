@@ -44,7 +44,7 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     """根据不同的模型类型设置API客户端"""
     try:
         # 使用OpenRouter API
-        api_base = "https://openrouter.ai/api/v1/chat/completions"
+        api_base = "https://openrouter.ai/api/v1"
         
         if model_type == "simplify":
             # 素材分析使用的API密钥和模型
