@@ -300,12 +300,6 @@ def simplify_content(content, direction, st_container=None):
         st.write("清理后的内容预览（前500字符）:")
         st.write(clean_content[:500])
         
-        # 记录当前使用的提示词
-        st.write("当前使用的提示词配置:")
-        st.write(f"背景设定: {backstory}")
-        st.write(f"任务描述: {task}")
-        st.write(f"输出格式: {output_format}")
-        
         # 构建完整的提示词模板
         template = f"""{backstory}
 
