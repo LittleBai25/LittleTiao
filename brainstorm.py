@@ -313,7 +313,12 @@ def simplify_content(content, direction, st_container=None):
             return "文档内容过短或为空，请检查上传的文件是否正确"
             
         # 获取API客户端 - 使用带有备用方案的流式输出
-        llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+        try:
+            llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+            st.success("成功初始化API客户端")
+        except Exception as e:
+            st.error(f"初始化API客户端失败: {str(e)}")
+            return f"初始化API客户端失败: {str(e)}"
         
         # 从会话状态获取提示词
         backstory = st.session_state.material_backstory_prompt
@@ -445,16 +450,12 @@ def simplify_content(content, direction, st_container=None):
                     if all_results:
                         # 使用LLM合并结果
                         st.info("合并所有处理结果...")
-                        merge_template = """请将以下多个分析结果合并成一个连贯的文档。保持原有的结构和格式，去除重复内容，确保逻辑连贯。
+                        merge_template = """合并以下分析结果，保持结构和格式，去除重复。
 
-分析结果:
+结果:
 {results}
 
-请生成一个完整的、结构化的分析报告。确保：
-1. 保持清晰的层次结构
-2. 去除重复内容
-3. 确保各部分之间的连贯性
-4. 突出与研究方向相关的关键信息"""
+请生成完整报告。"""
                         
                         merge_prompt = PromptTemplate(
                             template=merge_template,
