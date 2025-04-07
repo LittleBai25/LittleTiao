@@ -304,7 +304,7 @@ def simplify_content(content, direction, st_container=None):
         # 执行API调用
         with st.spinner("正在分析文档内容..."):
             try:
-                response = client.completions.create(
+                response = client.create(
                     model=model_name,
                     prompt=prompt,
                     temperature=temperature,
@@ -328,7 +328,7 @@ def simplify_content(content, direction, st_container=None):
                     if len(result.strip()) < len(clean_content) * 0.1:  # 如果结果太短
                         st.warning("输出结果可能不完整，正在重试...")
                         # 使用非流式输出重试
-                        response = client.completions.create(
+                        response = client.create(
                             model=model_name,
                             prompt=prompt,
                             temperature=temperature,
@@ -339,7 +339,7 @@ def simplify_content(content, direction, st_container=None):
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用非流式输出...")
                 # 尝试使用非流式输出
-                response = client.completions.create(
+                response = client.create(
                     model=model_name,
                     prompt=prompt,
                     temperature=temperature,
