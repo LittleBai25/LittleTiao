@@ -47,20 +47,17 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if model_type == "simplify":
         # 素材分析使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_SIMPLIFY", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_SIMPLIFY", "")
+        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
         temperature = 0.1  # 降低温度以获得更稳定的输出
     else:  # analysis
         # 脑暴报告使用的API密钥和模型
         api_key = st.secrets.get("OPENROUTER_API_KEY_ANALYSIS", "")
-        model_name = st.secrets.get("OPENROUTER_MODEL_ANALYSIS", "")
+        model_name = "openai/gpt-3.5-turbo"  # 使用更稳定的模型
         temperature = 0.3  # 降低温度以获得更稳定的输出
         
-    # 检查API密钥和模型名称是否为空
+    # 检查API密钥是否为空
     if not api_key:
         st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} API密钥未设置！请在secrets.toml中配置。")
-        st.stop()
-    if not model_name:
-        st.error(f"{'素材分析' if model_type == 'simplify' else '脑暴报告'} 模型未设置！请在secrets.toml中配置。")
         st.stop()
     
     # 设置回调处理器
@@ -68,19 +65,19 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = [StreamlitCallbackHandler(st_container)]
     
-    # 创建LangChain LLM客户端
+    # 创建LangChain LLM客户端 - 简化配置
     llm = OpenAI(
         model_name=model_name,
         openai_api_key=api_key,
         openai_api_base=api_base,
-        streaming=False,  # 禁用流式输出
+        streaming=stream,
         temperature=temperature,
+        max_tokens=2000,  # 减少输出长度限制
         callbacks=callbacks,
-        request_timeout=180,  # 增加超时时间到180秒
+        request_timeout=60,  # 增加超时时间到60秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1,  # 添加频率惩罚以减少重复
-        max_tokens=4000  # 设置最大输出token数
+        frequency_penalty=0.1  # 添加频率惩罚以减少重复
     )
     
     return llm
@@ -250,76 +247,41 @@ def process_file(file_path, file_type):
         return error_msg
 
 # 简化文件内容
-def split_into_paragraphs(content, max_tokens=3000):
-    """将内容按段落分割，保持语义完整性"""
-    # 首先按段落分割
-    paragraphs = content.split('\n\n')
+def chunk_content(content, chunk_size=8000):
+    """将内容分块处理"""
+    words = content.split()
     chunks = []
     current_chunk = []
     current_size = 0
     
-    for para in paragraphs:
-        # 清理段落内容
-        para = para.strip()
-        if not para:
-            continue
-            
-        # 估算段落token数（粗略估算：1个token约等于4个字符）
-        para_size = len(para) // 4
-        
-        # 如果单个段落就超过限制，需要进一步分割
-        if para_size > max_tokens:
-            # 按句子分割
-            sentences = re.split(r'[.!?。！？]+', para)
-            current_sentences = []
-            current_sentences_size = 0
-            
-            for sentence in sentences:
-                sentence = sentence.strip()
-                if not sentence:
-                    continue
-                    
-                sentence_size = len(sentence) // 4
-                if current_sentences_size + sentence_size > max_tokens and current_sentences:
-                    chunks.append(' '.join(current_sentences))
-                    current_sentences = [sentence]
-                    current_sentences_size = sentence_size
-                else:
-                    current_sentences.append(sentence)
-                    current_sentences_size += sentence_size
-            
-            if current_sentences:
-                chunks.append(' '.join(current_sentences))
+    for word in words:
+        word_size = len(word) + 1  # +1 for space
+        if current_size + word_size > chunk_size:
+            chunks.append(' '.join(current_chunk))
+            current_chunk = [word]
+            current_size = word_size
         else:
-            if current_size + para_size > max_tokens and current_chunk:
-                chunks.append('\n\n'.join(current_chunk))
-                current_chunk = [para]
-                current_size = para_size
-            else:
-                current_chunk.append(para)
-                current_size += para_size
+            current_chunk.append(word)
+            current_size += word_size
     
-    # 添加最后一个块
     if current_chunk:
-        chunks.append('\n\n'.join(current_chunk))
+        chunks.append(' '.join(current_chunk))
     
     return chunks
 
 def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
     try:
+        # 记录日志，确认内容长度
+        st.write(f"准备分析的内容总长度: {len(content)} 字符")
+        
         # 检查内容是否有效
         if not content or len(content.strip()) < 10:
             st.error("文档内容过短或为空")
             return "文档内容过短或为空，请检查上传的文件是否正确"
             
-        # 获取API客户端 - 使用非流式输出
-        try:
-            llm = get_langchain_llm("simplify", stream=False)
-            st.success("成功初始化API客户端")
-        except Exception as e:
-            st.error(f"初始化API客户端失败: {str(e)}")
-            return f"初始化API客户端失败: {str(e)}"
+        # 获取API客户端 - 使用带有备用方案的流式输出
+        llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
         
         # 从会话状态获取提示词
         backstory = st.session_state.material_backstory_prompt
@@ -331,178 +293,67 @@ def simplify_content(content, direction, st_container=None):
         clean_content = clean_content.replace('\x00', '')  # 移除空字符
         clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
         
-        # 显示调试信息
-        st.info(f"研究方向: {direction}")
-        st.info(f"文档长度: {len(clean_content)} 字符")
-        st.info(f"提示词设置:")
-        st.info(f"- Backstory: {backstory}")
-        st.info(f"- Task: {task}")
-        st.info(f"- Output Format: {output_format}")
+        # 记录清理后的内容长度
+        st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
-        # 创建进度条
-        progress_bar = st.progress(0)
+        # 将内容分块
+        chunks = chunk_content(clean_content)
+        st.write(f"文档被分成 {len(chunks)} 个部分进行处理")
         
-        # 尝试两种模式：不分块或适度分块
-        try_modes = ['no_chunks', 'few_chunks']
-        result = None
+        all_results = []
         
-        for mode_index, mode in enumerate(try_modes):
-            try:
-                progress_bar.progress((mode_index) / len(try_modes))
-                
-                if mode == 'no_chunks':
-                    st.info("尝试不分块处理文档...")
-                    
-                    # 简化提示模板
-                    template = f"""{backstory}
-
-{task}
-
-{output_format}
+        # 处理每个块
+        for i, chunk in enumerate(chunks, 1):
+            with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
+                # 简化提示模板
+                template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
 
 要求:
-1. 仔细阅读并理解文档内容
-2. 提取与研究方向"{direction}"相关的所有关键信息
-3. 保持原文的层次结构和逻辑关系
-4. 使用清晰的标题和列表组织内容
-5. 避免重复内容，保持简洁明了
-6. 如果内容与研究方向无关，请明确指出
-7. 请确保输出内容至少包含3个要点
-8. 输出必须完整，不要被截断
-
-文档内容:
-{clean_content}
-
-请生成结构化的分析结果。如果内容与研究方向无关，请说明原因。"""
-                    
-                    prompt = PromptTemplate(
-                        template=template,
-                        input_variables=["direction", "clean_content"]
-                    )
-                    
-                    # 创建LLMChain
-                    chain = LLMChain(llm=llm, prompt=prompt)
-                    
-                    try:
-                        st.info("正在处理整个文档，这可能需要一些时间...")
-                        result = chain.run(direction=direction, clean_content=clean_content)
-                        
-                        if result and len(result.strip()) > 10:
-                            st.success("成功处理完整文档！")
-                            break  # 如果成功处理，跳出循环
-                        else:
-                            st.warning("处理整个文档未能生成有效结果，尝试使用适度分块...")
-                            st.info(f"生成的结果: {result[:200] if result else '无结果'}")
-                    except Exception as e:
-                        st.warning(f"尝试不分块处理时出错: {str(e)}")
-                        st.info("将尝试使用适度分块...")
-                
-                elif mode == 'few_chunks':
-                    st.info("尝试使用适度分块处理文档...")
-                    
-                    # 使用较大的块大小
-                    chunks = split_into_paragraphs(clean_content, max_tokens=8000)
-                    st.info(f"文档被分为 {len(chunks)} 个部分")
-                    
-                    all_results = []
-                    
-                    # 处理每个块
-                    for i, chunk in enumerate(chunks, 1):
-                        with st.spinner(f"正在处理第 {i}/{len(chunks)} 部分..."):
-                            progress_bar.progress((mode_index + (i / len(chunks))) / len(try_modes))
-                            
-                            # 简化提示模板
-                            template = f"""{backstory}
-
-{task}
-
-{output_format}
-
-研究方向: {direction}
-
-要求:
-1. 仔细阅读并理解文档内容
-2. 提取与研究方向"{direction}"相关的所有关键信息
-3. 保持原文的层次结构和逻辑关系
-4. 使用清晰的标题和列表组织内容
-5. 避免重复内容，保持简洁明了
+1. 提取与研究方向相关的关键信息
+2. 保持原文的层次结构
+3. 使用清晰的标题和列表
+4. 避免重复内容
+5. 保持简洁明了
 6. 这是文档的第 {i} 部分，请专注于这部分内容
-7. 如果内容与研究方向无关，请明确指出
-8. 请确保输出内容至少包含3个要点
-9. 输出必须完整，不要被截断
 
 文档内容:
 {chunk}
 
-请生成结构化的分析结果。如果内容与研究方向无关，请说明原因。"""
-                            
-                            prompt = PromptTemplate(
-                                template=template,
-                                input_variables=["direction", "chunk"]
-                            )
-                            
-                            # 创建LLMChain
-                            chain = LLMChain(llm=llm, prompt=prompt)
-                            
-                            try:
-                                chunk_result = chain.run(direction=direction, chunk=chunk)
-                                if chunk_result and len(chunk_result.strip()) > 10:
-                                    all_results.append(chunk_result)
-                                    st.success(f"成功处理第 {i} 部分")
-                                else:
-                                    st.warning(f"第 {i} 部分生成的结果为空或过短")
-                                    st.info(f"内容预览: {chunk[:200]}...")
-                            except Exception as e:
-                                st.error(f"处理第 {i} 部分时出错: {str(e)}")
-                                st.info(f"内容预览: {chunk[:200]}...")
-                                continue
-                    
-                    # 检查是否有有效结果
-                    if all_results:
-                        # 使用LLM合并结果
-                        st.info("合并所有处理结果...")
-                        merge_template = """合并以下分析结果，保持结构和格式，去除重复。
-
-结果:
-{results}
-
-请生成完整报告，确保包含至少3个主要要点。输出必须完整，不要被截断。"""
-                        
-                        merge_prompt = PromptTemplate(
-                            template=merge_template,
-                            input_variables=["results"]
-                        )
-                        
-                        merge_chain = LLMChain(llm=llm, prompt=merge_prompt)
-                        result = merge_chain.run(results="\n\n".join(all_results))
-                        
-                        if result and len(result.strip()) > 10:
-                            st.success("成功合并所有部分的结果！")
-                            break  # 如果成功处理，跳出循环
-            
-            except Exception as e:
-                st.error(f"处理模式 {mode} 时出错: {str(e)}")
+请生成结构化的分析结果。"""
+                
+                prompt = PromptTemplate(
+                    template=template,
+                    input_variables=["direction", "chunk"]
+                )
+                
+                # 创建LLMChain
+                chain = LLMChain(llm=llm, prompt=prompt)
+                
+                try:
+                    result = chain.run(direction=direction, chunk=chunk)
+                    if result and len(result.strip()) > 10:
+                        all_results.append(result)
+                except Exception as e:
+                    st.error(f"处理第 {i} 部分时出错: {str(e)}")
+                    continue
         
-        # 完成进度条
-        progress_bar.progress(1.0)
-        
-        # 检查是否有有效结果
-        if not result or len(result.strip()) < 10:
-            st.error("未能生成有效结果")
-            st.info("可能的原因：")
-            st.info("1. 文档内容与研究方向不相关")
-            st.info("2. 提示词设置可能需要调整")
-            st.info("3. API调用可能失败")
-            st.info("4. 研究方向描述可能不够明确")
-            st.info("5. 文档内容可能过于复杂或格式不适合处理")
-            st.info("6. 模型输出被截断或未完成")
+        # 合并所有结果
+        if not all_results:
+            st.error("未能生成任何有效结果")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
-        return result
+        final_result = "\n\n".join(all_results)
+        
+        # 记录生成结果的长度
+        st.write(f"生成的分析结果长度: {len(final_result)} 字符")
+        
+        return final_result
     except Exception as e:
         st.error(f"分析过程中发生错误: {str(e)}")
+        st.write("错误详情：")
+        st.write(str(e))
         return f"分析过程中发生错误: {str(e)}"
 
 # 生成分析报告
