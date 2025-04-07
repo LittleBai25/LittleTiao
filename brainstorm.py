@@ -95,14 +95,33 @@ def process_file(file_path, file_type):
                 # 提取段落文本
                 for para in doc.paragraphs:
                     if para.text.strip():
-                        # 简单格式处理，提取加粗和其他格式
+                        # 增强格式处理，保留更多格式信息
                         para_text = ""
                         for run in para.runs:
+                            text = run.text.strip()
+                            if not text:
+                                continue
+                                
+                            # 处理加粗
                             if run.bold:
-                                para_text += f"**{run.text}**"
-                            else:
-                                para_text += run.text
-                        content_parts.append(para_text)
+                                text = f"**{text}**"
+                            # 处理斜体
+                            if run.italic:
+                                text = f"*{text}*"
+                            # 处理下划线
+                            if run.underline:
+                                text = f"__{text}__"
+                            # 处理字体大小
+                            if run.font.size:
+                                size = run.font.size.pt if run.font.size.pt else 11
+                                if size > 11:
+                                    text = f"# {text}" if size > 14 else f"## {text}"
+                            
+                            para_text += text + " "
+                        
+                        # 清理多余空格并添加段落
+                        if para_text.strip():
+                            content_parts.append(para_text.strip())
                 
                 # 提取表格内容
                 for table_idx, table in enumerate(doc.tables):
@@ -154,7 +173,7 @@ def process_file(file_path, file_type):
                             if row_texts:
                                 content_parts.append(" | ".join(row_texts))
                 
-                # 合并所有内容
+                # 合并所有内容，添加适当的换行
                 content = "\n\n".join(content_parts)
                 
                 # 记录日志
@@ -162,6 +181,10 @@ def process_file(file_path, file_type):
                     
                 # 后处理，清理可能的重复内容和格式标记
                 content = content.replace('{.mark}', '').replace('{.underline}', '')
+                
+                # 确保内容不为空
+                if not content.strip():
+                    return f"警告: 文件 {os.path.basename(file_path)} 内容为空"
                 
                 return content
             except Exception as e:
