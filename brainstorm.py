@@ -73,13 +73,15 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         model_name=model_name,
         openai_api_key=api_key,
         openai_api_base=api_base,
-        streaming=stream,
+        streaming=False,  # 禁用流式输出
         temperature=temperature,
         callbacks=callbacks,
-        request_timeout=120,  # 增加超时时间到120秒
+        request_timeout=180,  # 增加超时时间到180秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1  # 添加频率惩罚以减少重复
+        frequency_penalty=0.1,  # 添加频率惩罚以减少重复
+        max_tokens=4000,  # 设置最大输出token数
+        stop=None  # 不设置停止条件，让模型完整输出
     )
     
     return llm
