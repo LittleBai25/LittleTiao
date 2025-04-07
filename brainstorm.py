@@ -302,7 +302,7 @@ def simplify_content(content, direction, st_container=None):
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
         # 简化提示模板
-        template = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
+        prompt_text = f"""你是一个专业的文档分析助手。请分析以下文档内容，提取关键信息。
 
 研究方向: {direction}
 
@@ -322,18 +322,16 @@ def simplify_content(content, direction, st_container=None):
 
 请生成结构化的分析结果。"""
         
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=["direction", "clean_content"]
-        )
-        
         # 创建LLMChain
-        chain = LLMChain(llm=llm, prompt=prompt)
+        chain = LLMChain(llm=llm, prompt=PromptTemplate(
+            template=prompt_text,
+            input_variables=[]
+        ))
         
-        # 执行链 - 使用更明确的参数名称
+        # 执行链
         with st.spinner("正在分析文档内容..."):
             try:
-                result = chain.run(direction=direction, clean_content=clean_content)
+                result = chain.run({})
                 # 检查结果是否完整
                 if result and len(result.strip()) > 0:
                     # 等待一段时间确保输出完成
@@ -343,15 +341,21 @@ def simplify_content(content, direction, st_container=None):
                         st.warning("输出结果可能不完整，正在重试...")
                         # 使用非流式输出重试
                         llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
-                        chain = LLMChain(llm=llm, prompt=prompt)
-                        result = chain.run(direction=direction, clean_content=clean_content)
+                        chain = LLMChain(llm=llm, prompt=PromptTemplate(
+                            template=prompt_text,
+                            input_variables=[]
+                        ))
+                        result = chain.run({})
             except Exception as e:
                 st.error(f"API调用失败: {str(e)}")
                 st.write("正在尝试使用备用模型...")
                 # 尝试使用备用模型
                 llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
-                chain = LLMChain(llm=llm, prompt=prompt)
-                result = chain.run(direction=direction, clean_content=clean_content)
+                chain = LLMChain(llm=llm, prompt=PromptTemplate(
+                    template=prompt_text,
+                    input_variables=[]
+                ))
+                result = chain.run({})
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
