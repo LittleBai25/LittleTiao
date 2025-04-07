@@ -65,20 +65,18 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
     if stream and st_container:
         callbacks = [StreamlitCallbackHandler(st_container)]
     
-    # 创建LangChain LLM客户端 - 使用completion模式
+    # 创建LangChain LLM客户端
     llm = OpenAI(
         model_name=model_name,
         openai_api_key=api_key,
         openai_api_base=api_base,
         streaming=stream,
         temperature=temperature,
-        max_tokens=2000,  # 减少输出长度限制
         callbacks=callbacks,
         request_timeout=60,  # 增加超时时间到60秒
         max_retries=3,  # 添加重试机制
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
-        frequency_penalty=0.1,  # 添加频率惩罚以减少重复
-        model_kwargs={"mode": "completion"}  # 使用completion模式
+        frequency_penalty=0.1  # 添加频率惩罚以减少重复
     )
     
     return llm
