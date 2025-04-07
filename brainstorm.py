@@ -245,13 +245,18 @@ def process_file(file_path, file_type):
 # 简化文件内容
 def simplify_content(content, direction, st_container=None):
     """使用AI简化上传的文件内容"""
-    # 记录日志，确认内容长度
-    st.write(f"准备分析的内容总长度: {len(content)} 字符")
-    
-    # 获取API客户端 - 使用带有备用方案的流式输出
-    llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
-    
     try:
+        # 记录日志，确认内容长度
+        st.write(f"准备分析的内容总长度: {len(content)} 字符")
+        
+        # 检查内容是否有效
+        if not content or len(content.strip()) < 10:
+            st.error("文档内容过短或为空")
+            return "文档内容过短或为空，请检查上传的文件是否正确"
+            
+        # 获取API客户端 - 使用带有备用方案的流式输出
+        llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+        
         # 从会话状态获取提示词
         backstory = st.session_state.material_backstory_prompt
         task = st.session_state.material_task_prompt
@@ -259,6 +264,9 @@ def simplify_content(content, direction, st_container=None):
         
         # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
+        
+        # 记录清理后的内容长度
+        st.write(f"清理后的内容长度: {len(clean_content)} 字符")
         
         # 增强提示模板，使其更通用
         template = f"""{backstory}
@@ -273,6 +281,8 @@ def simplify_content(content, direction, st_container=None):
 3. 注意识别文档中的主要观点、论据和结论
 4. 输出应为简明扼要的要点，保持原文的层次结构
 5. 确保不遗漏任何重要信息
+6. 如果文档包含表格，请保留表格的结构和内容
+7. 如果文档包含图片，请描述图片的内容和位置
 
 研究方向: {direction}
 
@@ -288,15 +298,26 @@ def simplify_content(content, direction, st_container=None):
         chain = LLMChain(llm=llm, prompt=prompt)
         
         # 执行链 - 使用更明确的参数名称
-        result = chain.run(direction=direction, clean_content=clean_content)
+        with st.spinner("正在分析文档内容..."):
+            result = chain.run(direction=direction, clean_content=clean_content)
         
-        # 如果返回内容为空，提供简短的错误信息
+        # 检查结果是否有效
         if not result or len(result.strip()) < 10:
+            st.error("AI分析未能生成有效结果")
+            st.write("可能的原因：")
+            st.write("1. 文档内容可能过于复杂或格式特殊")
+            st.write("2. 研究方向描述可能不够明确")
+            st.write("3. API调用可能出现了问题")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
+        
+        # 记录生成结果的长度
+        st.write(f"生成的分析结果长度: {len(result)} 字符")
         
         return result
     except Exception as e:
         st.error(f"分析过程中发生错误: {str(e)}")
+        st.write("错误详情：")
+        st.write(str(e))
         return f"分析过程中发生错误: {str(e)}"
 
 # 生成分析报告
