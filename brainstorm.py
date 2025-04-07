@@ -81,7 +81,13 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         presence_penalty=0.1,  # 添加存在惩罚以减少重复
         frequency_penalty=0.1,  # 添加频率惩罚以减少重复
         max_tokens=4000,  # 设置最大输出token数
-        stop=None  # 不设置停止条件，让模型完整输出
+        stop=None,  # 不设置停止条件，让模型完整输出
+        model_kwargs={
+            "headers": {
+                "HTTP-Referer": "https://github.com/your-repo",  # 替换为你的仓库地址
+                "X-Title": "Brainstorm Assistant"  # 你的应用名称
+            }
+        }
     )
     
     return llm
@@ -314,9 +320,9 @@ def simplify_content(content, direction, st_container=None):
             st.error("文档内容过短或为空")
             return "文档内容过短或为空，请检查上传的文件是否正确"
             
-        # 获取API客户端 - 使用带有备用方案的流式输出
+        # 获取API客户端 - 使用非流式输出
         try:
-            llm = get_langchain_llm("simplify", stream=True, st_container=st_container)
+            llm = get_langchain_llm("simplify", stream=False)
             st.success("成功初始化API客户端")
         except Exception as e:
             st.error(f"初始化API客户端失败: {str(e)}")
@@ -371,6 +377,7 @@ def simplify_content(content, direction, st_container=None):
 5. 避免重复内容，保持简洁明了
 6. 如果内容与研究方向无关，请明确指出
 7. 请确保输出内容至少包含3个要点
+8. 输出必须完整，不要被截断
 
 文档内容:
 {clean_content}
@@ -431,6 +438,7 @@ def simplify_content(content, direction, st_container=None):
 6. 这是文档的第 {i} 部分，请专注于这部分内容
 7. 如果内容与研究方向无关，请明确指出
 8. 请确保输出内容至少包含3个要点
+9. 输出必须完整，不要被截断
 
 文档内容:
 {chunk}
@@ -467,7 +475,7 @@ def simplify_content(content, direction, st_container=None):
 结果:
 {results}
 
-请生成完整报告，确保包含至少3个主要要点。"""
+请生成完整报告，确保包含至少3个主要要点。输出必须完整，不要被截断。"""
                         
                         merge_prompt = PromptTemplate(
                             template=merge_template,
