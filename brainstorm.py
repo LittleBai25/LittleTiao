@@ -86,11 +86,11 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
             stop=None  # 不设置停止条件
         )
         
-        # 测试API连接
+        # 测试API连接 - 使用generate方法而不是predict
         test_prompt = "Hello, this is a test."
         try:
-            test_response = llm.predict(test_prompt)
-            if not test_response:
+            test_response = llm.generate([test_prompt])
+            if not test_response or not test_response.generations:
                 raise Exception("API测试响应为空")
             st.write("API连接测试成功")
         except Exception as e:
