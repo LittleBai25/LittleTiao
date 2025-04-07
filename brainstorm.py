@@ -73,7 +73,9 @@ def get_langchain_llm(model_type="simplify", stream=False, st_container=None):
         streaming=stream,
         temperature=temperature,
         max_tokens=4000,
-        callbacks=callbacks
+        callbacks=callbacks,
+        request_timeout=60,  # 增加超时时间到60秒
+        max_retries=3  # 添加重试机制
     )
     
     return llm
@@ -264,6 +266,8 @@ def simplify_content(content, direction, st_container=None):
         
         # 清理文本，移除可能导致问题的特殊字符
         clean_content = content.replace('{.mark}', '').replace('{.underline}', '')
+        clean_content = clean_content.replace('\x00', '')  # 移除空字符
+        clean_content = re.sub(r'\s+', ' ', clean_content)  # 规范化空白字符
         
         # 记录清理后的内容长度
         st.write(f"清理后的内容长度: {len(clean_content)} 字符")
@@ -283,6 +287,8 @@ def simplify_content(content, direction, st_container=None):
 5. 确保不遗漏任何重要信息
 6. 如果文档包含表格，请保留表格的结构和内容
 7. 如果文档包含图片，请描述图片的内容和位置
+8. 请确保输出格式清晰，使用适当的标题和列表
+9. 如果遇到无法理解的内容，请保持原文
 
 研究方向: {direction}
 
@@ -299,7 +305,15 @@ def simplify_content(content, direction, st_container=None):
         
         # 执行链 - 使用更明确的参数名称
         with st.spinner("正在分析文档内容..."):
-            result = chain.run(direction=direction, clean_content=clean_content)
+            try:
+                result = chain.run(direction=direction, clean_content=clean_content)
+            except Exception as e:
+                st.error(f"API调用失败: {str(e)}")
+                st.write("正在尝试使用备用模型...")
+                # 尝试使用备用模型
+                llm = get_langchain_llm("simplify", stream=False, st_container=st_container)
+                chain = LLMChain(llm=llm, prompt=prompt)
+                result = chain.run(direction=direction, clean_content=clean_content)
         
         # 检查结果是否有效
         if not result or len(result.strip()) < 10:
@@ -308,6 +322,7 @@ def simplify_content(content, direction, st_container=None):
             st.write("1. 文档内容可能过于复杂或格式特殊")
             st.write("2. 研究方向描述可能不够明确")
             st.write("3. API调用可能出现了问题")
+            st.write("4. 文档内容可能包含特殊字符或格式")
             return "AI分析未能生成有效结果。请检查文档内容是否相关，或调整提示词设置。"
         
         # 记录生成结果的长度
