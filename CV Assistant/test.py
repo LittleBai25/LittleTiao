@@ -147,25 +147,23 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
             st.code(traceback.format_exc())
 
 # Tab布局
-TAB1, TAB2 = st.tabs(["文件上传与分析", "提示词设置"])
+TAB1, TAB2 = st.tabs(["文件上传与分析", "提示词与模型设置"])
 
 with TAB1:
     st.header("上传你的简历素材和支持文件")
     resume_file = st.file_uploader("个人简历素材表（单选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
-    # 从第二个tab移过来的模型选择
-    st.subheader("选择模型")
-    model_list = get_model_list()
-    model = st.selectbox("选择大模型", model_list)
-    
     # 添加"开始分析"按钮
-    if st.button("开始分析"):
+    if st.button("开始分析", use_container_width=True):
         if not api_key:
             st.error("请在 Streamlit secrets 中配置 OPENROUTER_API_KEY")
         elif not resume_file:
             st.error("请上传简历素材表")
         else:
+            # 从session_state获取模型
+            model = st.session_state.get("selected_model", get_model_list()[0])
+            
             # 读取文件内容
             resume_content = read_file(resume_file)
             st.session_state.resume_content = resume_content
@@ -188,33 +186,35 @@ with TAB1:
             )
 
 with TAB2:
-    st.header("提示词设置")
+    st.header("提示词与模型设置")
     
     # 尝试加载保存的提示词
     load_prompts()
+    
+    # 模型选择移到这里
+    st.subheader("选择模型")
+    model_list = get_model_list()
+    selected_model = st.selectbox("选择大模型", model_list)
+    # 将选择的模型保存到session_state
+    st.session_state.selected_model = selected_model
+    
+    st.subheader("提示词设置")
     
     # 提示词输入区
     persona = st.text_area("人物设定", value=st.session_state.persona, placeholder="如：我是应届毕业生，主修计算机科学……", height=150)
     task = st.text_area("任务描述", value=st.session_state.task, placeholder="如：请根据我的简历素材，生成一份针对XX岗位的简历……", height=150)
     output_format = st.text_area("输出格式", value=st.session_state.output_format, placeholder="如：请用markdown格式输出，包含以下部分……", height=150)
     
-    # 保存和更新按钮
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("保存提示词"):
-            # 更新session state
-            st.session_state.persona = persona
-            st.session_state.task = task
-            st.session_state.output_format = output_format
+    # 简化按钮，只保留一个保存按钮
+    if st.button("保存提示词", use_container_width=True):
+        # 更新session state
+        st.session_state.persona = persona
+        st.session_state.task = task
+        st.session_state.output_format = output_format
+        
+        # 保存到文件
+        if save_prompts():
+            st.success("提示词已保存到文件，下次启动应用时会自动加载")
             
-            # 保存到文件
-            if save_prompts():
-                st.success("提示词已保存")
-    
-    with col2:
-        if st.button("更新提示词"):
-            # 更新session state
-            st.session_state.persona = persona
-            st.session_state.task = task
-            st.session_state.output_format = output_format
-            st.success("提示词已更新")
+    # 添加简短的说明
+    st.info("提示：保存后的提示词会在每次应用启动时自动加载。修改后需点击保存才会生效。")
