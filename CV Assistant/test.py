@@ -9,6 +9,11 @@ from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 import openai
+from typing import TypedDict, List, Dict, Any
+from langchain_core.messages import BaseMessage
+
+class ChatState(TypedDict):
+    messages: List[BaseMessage]
 
 st.set_page_config(page_title="个人简历写作助理", layout="wide")
 
@@ -84,15 +89,15 @@ with TAB2:
                         )
                         
                         # 定义 LLM 节点处理函数
-                        def llm_node(state):
+                        def llm_node(state: ChatState) -> ChatState:
                             messages = state.get("messages", [])
                             # 使用 langchain 的 ChatOpenAI 处理信息
                             result = llm.invoke(messages)
                             # 更新状态
                             return {"messages": messages + [result]}
                         
-                        # 创建图结构
-                        workflow = StateGraph()
+                        # 创建图结构，并提供状态架构
+                        workflow = StateGraph(ChatState)
                         
                         # 添加自定义 LLM 节点
                         workflow.add_node("generate_cv", llm_node)
