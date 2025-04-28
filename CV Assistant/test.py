@@ -10,6 +10,14 @@ api_key = st.secrets.get("OPENROUTER_API_KEY", "")
 # Tab布局
 TAB1, TAB2 = st.tabs(["文件上传", "模型与提示词调试"])
 
+# 获取模型列表（从secrets读取，逗号分隔）
+def get_model_list():
+    model_str = st.secrets.get("OPENROUTER_MODEL", "")
+    if model_str:
+        return [m.strip() for m in model_str.split(",") if m.strip()]
+    else:
+        return ["gpt-3.5-turbo", "gpt-4", "qwen-turbo", "glm-4", "其它模型..."]
+
 with TAB1:
     st.header("上传你的简历素材和支持文件")
     resume_file = st.file_uploader("个人简历素材表（单选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
@@ -37,7 +45,8 @@ with TAB1:
 
 with TAB2:
     st.header("模型选择与提示词调试")
-    model = st.selectbox("选择大模型", ["gpt-3.5-turbo", "gpt-4", "qwen-turbo", "glm-4", "其它模型..."])
+    model_list = get_model_list()
+    model = st.selectbox("选择大模型", model_list)
     persona = st.text_area("人物设定", placeholder="如：我是应届毕业生，主修计算机科学……")
     task = st.text_area("任务描述", placeholder="如：请根据我的简历素材，生成一份针对XX岗位的简历……")
     output_format = st.text_area("输出格式", placeholder="如：请用markdown格式输出，包含以下部分……")
