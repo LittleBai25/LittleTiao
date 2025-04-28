@@ -10,6 +10,9 @@ from typing import TypedDict, List, Dict, Any
 from langchain_core.messages import BaseMessage
 import json
 import os
+from langsmith import Client
+from langchain_core.tracers import LangChainTracer
+import uuid
 
 class ChatState(TypedDict):
     messages: List[BaseMessage]
@@ -18,6 +21,29 @@ st.set_page_config(page_title="个人简历写作助手", layout="wide")
 
 # 读取API KEY
 api_key = st.secrets.get("OPENROUTER_API_KEY", "")
+
+# 读取LangSmith配置（从secrets或环境变量）
+langsmith_api_key = st.secrets.get("LANGSMITH_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+langsmith_project = st.secrets.get("LANGSMITH_PROJECT", os.environ.get("LANGSMITH_PROJECT", "cv-assistant"))
+
+# 设置LangSmith环境变量
+if langsmith_api_key:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
+    os.environ["LANGCHAIN_PROJECT"] = langsmith_project
+
+# 初始化LangSmith客户端（如果配置了API Key）
+langsmith_client = None
+if langsmith_api_key:
+    try:
+        langsmith_client = Client(api_key=langsmith_api_key)
+        # 创建项目（如果不存在）
+        projects = langsmith_client.list_projects()
+        project_names = [p.name for p in projects]
+        if langsmith_project not in project_names:
+            langsmith_client.create_project(langsmith_project)
+    except Exception as e:
+        st.warning(f"LangSmith初始化失败: {str(e)}")
 
 # 初始化session state用于存储提示词和文件内容
 if "persona" not in st.session_state:
@@ -92,6 +118,17 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
     
     with st.spinner("AI 正在处理中..."):
         try:
+            # 创建唯一的运行ID用于跟踪
+            run_id = str(uuid.uuid4())
+            
+            # 创建跟踪器（如果启用了LangSmith）
+            tracer = None
+            if langsmith_api_key:
+                tracer = LangChainTracer(
+                    project_name=langsmith_project,
+                    run_id=run_id
+                )
+            
             # 构建 LangGraph 处理流程
             def create_cv_graph():
                 # 创建 LLM 节点，使用 ChatOpenAI
@@ -99,14 +136,47 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                     api_key=api_key,
                     base_url="https://openrouter.ai/api/v1",
                     model=model,
-                    temperature=0.7
+                    temperature=0.7,
+                    # 添加追踪器
+                    callbacks=[tracer] if tracer else None
                 )
                 
                 # 定义 LLM 节点处理函数
                 def llm_node(state: ChatState) -> ChatState:
                     messages = state.get("messages", [])
+                    # 在LangSmith中记录请求
+                    if langsmith_client:
+                        try:
+                            metadata = {
+                                "model": model,
+                                "message_count": len(messages),
+                                "action": "generate_cv"
+                            }
+                            langsmith_client.create_run(
+                                name="简历生成",
+                                run_type="llm",
+                                inputs={"messages": [m.content for m in messages]},
+                                project_name=langsmith_project,
+                                run_id=run_id,
+                                extra=metadata
+                            )
+                        except Exception as e:
+                            st.warning(f"LangSmith跟踪错误: {str(e)}")
+                    
                     # 使用 langchain 的 ChatOpenAI 处理信息
                     result = llm.invoke(messages)
+                    
+                    # 在LangSmith中记录结果
+                    if langsmith_client:
+                        try:
+                            langsmith_client.update_run(
+                                run_id=run_id,
+                                outputs={"content": result.content},
+                                end_time=None  # 让LangSmith自动计算结束时间
+                            )
+                        except Exception as e:
+                            st.warning(f"LangSmith更新错误: {str(e)}")
+                    
                     # 更新状态
                     return {"messages": messages + [result]}
                 
@@ -139,6 +209,12 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
             
             # 显示回复
             st.markdown(output, unsafe_allow_html=True)
+            
+            # 显示LangSmith链接（如果启用）
+            if langsmith_api_key:
+                langsmith_base_url = st.secrets.get("LANGSMITH_BASE_URL", "https://smith.langchain.com")
+                langsmith_url = f"{langsmith_base_url}/projects/{langsmith_project}/runs/{run_id}"
+                st.info(f"在LangSmith中查看此运行: [打开监控面板]({langsmith_url})")
         
         except Exception as e:
             st.error(f"LangChain/LangGraph 处理失败: {str(e)}")
@@ -218,3 +294,35 @@ with TAB2:
             
     # 添加简短的说明
     st.info("提示：保存后的提示词会在每次应用启动时自动加载。修改后需点击保存才会生效。")
+
+# 添加LangSmith状态指示器
+with st.sidebar:
+    st.title("系统状态")
+    
+    # 显示API连接状态
+    st.subheader("API连接")
+    if api_key:
+        st.success("OpenRouter API已配置")
+    else:
+        st.error("OpenRouter API未配置")
+    
+    # 显示LangSmith连接状态
+    st.subheader("LangSmith监控")
+    if langsmith_client:
+        st.success(f"已连接到LangSmith")
+        st.info(f"项目: {langsmith_project}")
+        # 获取最近的运行记录
+        try:
+            runs = langsmith_client.list_runs(
+                project_name=langsmith_project,
+                limit=5
+            )
+            if runs:
+                st.write("最近5次运行:")
+                for run in runs:
+                    st.write(f"- {run.name} ({run.run_type}) - {run.status}")
+        except:
+            st.write("无法获取最近运行记录")
+    else:
+        st.warning("LangSmith未配置")
+        st.info("如需启用AI监控，请设置LANGSMITH_API_KEY")
