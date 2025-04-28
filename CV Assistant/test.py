@@ -105,8 +105,8 @@ with TAB2:
                         # 设置入口点
                         workflow.set_entry_point("generate_cv")
                         
-                        # 设置流程完成点
-                        workflow.set_finish_point("generate_cv", END)
+                        # 设置流程完成点 - 修复方法调用
+                        workflow.add_edge("generate_cv", END)
                         
                         # 编译图为可执行对象
                         return workflow.compile()
