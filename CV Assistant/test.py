@@ -48,8 +48,24 @@ def read_file(file):
         return None
 
 def main():
-    st.title("CV Writing Assistant")
-    st.write("Hello World!")
+    try:
+        st.set_page_config(
+            page_title="CV Assistant",
+            page_icon="📝",
+            layout="wide"
+        )
+        
+        st.title("CV Writing Assistant")
+        st.write("Welcome to the CV Writing Assistant!")
+        
+        # Add a simple text input
+        user_input = st.text_input("Enter your name:")
+        if user_input:
+            st.write(f"Hello, {user_input}!")
+        
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+        st.stop()
 
 if __name__ == "__main__":
     main()
