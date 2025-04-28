@@ -2,9 +2,12 @@ import streamlit as st
 from markitdown import MarkItDown
 import requests
 import io
-# 添加 langgraph 相关导入
+# 修改导入，使用langchain的ChatOpenAI而非langgraph的OpenAIChatNode
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import OpenAIChatNode
+# 移除原有的OpenAIChatNode导入
+# from langgraph.prebuilt import OpenAIChatNode
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
 import openai
 
 st.set_page_config(page_title="个人简历写作助理", layout="wide")
@@ -70,19 +73,28 @@ with TAB2:
             
             with st.spinner("AI 正在处理中..."):
                 try:
-                    # 设置 OpenAI 配置
-                    openai.api_key = api_key
-                    openai.base_url = "https://openrouter.ai/api/v1"
-                    
                     # 构建 LangGraph 处理流程
                     def create_cv_graph():
-                        # 创建 LLM 节点
-                        llm_node = OpenAIChatNode(model=model)
+                        # 创建 LLM 节点，使用 ChatOpenAI 代替 OpenAIChatNode
+                        llm = ChatOpenAI(
+                            api_key=api_key,
+                            base_url="https://openrouter.ai/api/v1",
+                            model=model,
+                            temperature=0.7
+                        )
+                        
+                        # 定义 LLM 节点处理函数
+                        def llm_node(state):
+                            messages = state.get("messages", [])
+                            # 使用 langchain 的 ChatOpenAI 处理信息
+                            result = llm.invoke(messages)
+                            # 更新状态
+                            return {"messages": messages + [result]}
                         
                         # 创建图结构
                         workflow = StateGraph()
                         
-                        # 添加节点
+                        # 添加自定义 LLM 节点
                         workflow.add_node("generate_cv", llm_node)
                         
                         # 设置入口点
@@ -94,20 +106,23 @@ with TAB2:
                         # 编译图为可执行对象
                         return workflow.compile()
                     
-                    # 初始化图结构并执行
+                    # 初始化图结构
                     cv_chain = create_cv_graph()
                     
-                    # 准备输入数据
-                    input_data = {"messages": [{"role": "user", "content": prompt}]}
+                    # 准备输入数据，使用langchain的消息格式
+                    input_data = {"messages": [HumanMessage(content=prompt)]}
                     
                     # 执行图并获取结果
                     result = cv_chain.invoke(input_data)
                     
                     # 从结果中提取 AI 回复
-                    output = result["messages"][-1]["content"]
+                    output = result["messages"][-1].content
                     
                     # 显示回复
                     st.markdown(output, unsafe_allow_html=True)
                 
                 except Exception as e:
-                    st.error(f"LangGraph 处理失败: {str(e)}")
+                    st.error(f"LangChain/LangGraph 处理失败: {str(e)}")
+                    st.error("详细错误信息：")
+                    import traceback
+                    st.code(traceback.format_exc())
