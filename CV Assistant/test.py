@@ -130,7 +130,7 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                     metadata = {
                         "model": model,
                         "action": "generate_cv",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": datetime.now()
                     }
                     # 直接使用Client API记录运行，而不是通过Tracer
                     langsmith_client.create_run(
@@ -180,7 +180,7 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                             # 立即标记为完成
                             langsmith_client.update_run(
                                 run_id=child_run_id,
-                                end_time=datetime.now().isoformat()
+                                end_time=datetime.now()
                             )
                         except Exception as e:
                             st.warning(f"LangSmith子运行记录失败: {str(e)}")
@@ -221,7 +221,7 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                     langsmith_client.update_run(
                         run_id=run_id,
                         outputs={"response": output},
-                        end_time=datetime.now().isoformat()
+                        end_time=datetime.now()
                     )
                 except Exception as e:
                     st.warning(f"LangSmith更新运行结果失败: {str(e)}")
