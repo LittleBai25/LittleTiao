@@ -121,13 +121,18 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
             # 创建唯一的运行ID用于跟踪
             run_id = str(uuid.uuid4())
             
-            # 创建跟踪器（如果启用了LangSmith）
-            tracer = None
+            # 创建回调列表
+            callbacks = []
+            
+            # 根据最新API添加LangChain追踪（如果启用了LangSmith）
             if langsmith_api_key:
-                tracer = LangChainTracer(
-                    project_name=langsmith_project,
-                    run_id=run_id
-                )
+                try:
+                    from langchain.callbacks.tracers import LangChainTracer
+                    # 使用新的方式初始化tracer
+                    tracer = LangChainTracer(project_name=langsmith_project)
+                    callbacks.append(tracer)
+                except Exception as e:
+                    st.warning(f"无法创建LangSmith追踪器: {str(e)}")
             
             # 构建 LangGraph 处理流程
             def create_cv_graph():
@@ -137,8 +142,8 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                     base_url="https://openrouter.ai/api/v1",
                     model=model,
                     temperature=0.7,
-                    # 添加追踪器
-                    callbacks=[tracer] if tracer else None
+                    # 添加追踪器到回调
+                    callbacks=callbacks if callbacks else None
                 )
                 
                 # 定义 LLM 节点处理函数
