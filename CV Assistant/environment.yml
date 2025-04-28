@@ -1,0 +1,12 @@
+name: cv-assistant
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - streamlit=1.31.1
+  - pip
+  - pandas
+  - python-docx
+  - PyPDF2
+  - openpyxl 
