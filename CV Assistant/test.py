@@ -1,48 +1,4 @@
-# 尝试使用模拟的MarkItDown功能（简单版本）
-def simple_structured_content(text):
-    if not text:
-        return None
-    
-    # 简单的表格检测和格式化
-    lines = text.split('\n')
-    formatted_text = ""
-    
-    # 检测可能的表格部分
-    table_sections = []
-    current_table = []
-    in_table = False
-    
-    for line in lines:
-        # 简单地检测带有多个分隔符的行作为可能的表格
-        if '|' in line or '\t' in line:
-            if not in_table:
-                in_table = True
-            current_table.append(line)
-        else:
-            if in_table and current_table:
-                table_sections.append(current_table)
-                current_table = []
-                in_table = False
-            if line.strip():  # 避免空行
-                formatted_text += line + "\n"
-    
-    # 处理最后一个表格
-    if in_table and current_table:
-        table_sections.append(current_table)
-    
-    # 为检测到的表格部分添加格式
-    for table in table_sections:
-        formatted_text += "\n表格内容:\n"
-        for row in table:
-            # 尝试统一分隔符
-            row = row.replace('\t', ' | ')
-            formatted_text += row + "\n"
-        formatted_text += "\n"
-    
-    return {
-        "content": formatted_text,
-        "has_tables": bool(table_sections)
-    }import streamlit as st
+import streamlit as st
 import os
 import json
 import requests
@@ -51,15 +7,6 @@ import io
 import base64
 from tempfile import NamedTemporaryFile
 from PIL import Image
-
-# 尝试导入markitdown，如果失败则记录错误但不中断程序
-try:
-    from markitdown import MarkItDown
-    MARKITDOWN_AVAILABLE = True
-except ImportError:
-    MARKITDOWN_AVAILABLE = False
-    st.warning("markitdown库导入失败，将使用基本文件处理方法。如需更好地处理表格，请安装markitdown: pip install markitdown")
-
 
 # 设置页面标题和配置
 st.set_page_config(
@@ -142,24 +89,61 @@ def read_pdf(uploaded_file):
             return None
     return None
 
-# 读取Word文件
+# 增强版Word文件读取，改进对表格的支持
 def read_docx(uploaded_file):
     if uploaded_file is not None:
         try:
             import docx
             doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
+            
+            # 提取段落内容
             text = ""
             for para in doc.paragraphs:
-                text += para.text + "\n"
+                if para.text.strip():  # 忽略空段落
+                    text += para.text + "\n\n"
             
-            # 提取表格内容
-            for table in doc.tables:
-                text += "\n表格内容:\n"
+            # 增强的表格提取
+            for i, table in enumerate(doc.tables):
+                text += f"\n### 表格 {i+1}:\n"
+                
+                # 计算每一列的最大宽度，以便对齐
+                col_widths = []
+                for row in table.rows:
+                    for i, cell in enumerate(row.cells):
+                        cell_text = cell.text.strip()
+                        if i >= len(col_widths):
+                            col_widths.append(len(cell_text))
+                        else:
+                            col_widths[i] = max(col_widths[i], len(cell_text))
+                
+                # 创建表格的Markdown格式
+                # 添加表头行
+                first_row = table.rows[0]
+                header = "| "
+                for i, cell in enumerate(first_row.cells):
+                    cell_text = cell.text.strip()
+                    padding = col_widths[i] - len(cell_text)
+                    header += cell_text + " " * padding + " | "
+                text += header + "\n"
+                
+                # 添加分隔行
+                separator = "| "
+                for width in col_widths:
+                    separator += "-" * width + " | "
+                text += separator + "\n"
+                
+                # 添加内容行（从第二行开始）
                 for row_idx, row in enumerate(table.rows):
-                    row_text = []
-                    for cell in row.cells:
-                        row_text.append(cell.text)
-                    text += " | ".join(row_text) + "\n"
+                    if row_idx == 0:  # 跳过表头
+                        continue
+                    row_text = "| "
+                    for i, cell in enumerate(row.cells):
+                        cell_text = cell.text.strip()
+                        padding = col_widths[i] - len(cell_text)
+                        row_text += cell_text + " " * padding + " | "
+                    text += row_text + "\n"
+                
+                text += "\n"  # 表格后添加空行
             
             return text
         except Exception as e:
@@ -176,13 +160,14 @@ def read_image(uploaded_file):
             
             # 转换为base64以便在应用中显示
             buffered = io.BytesIO()
-            image.save(buffered, format=image.format if image.format else "PNG")
+            image_format = image.format if image.format else "PNG"
+            image.save(buffered, format=image_format)
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
             # 返回图片信息
             return {
                 "type": "image",
-                "format": image.format if image.format else "PNG",
+                "format": image_format,
                 "size": image.size,
                 "mode": image.mode,
                 "base64": img_str
@@ -192,30 +177,6 @@ def read_image(uploaded_file):
             return None
     return None
 
-# 使用MarkItDown读取文件（如果可用）
-def read_with_markitdown(uploaded_file):
-    if not MARKITDOWN_AVAILABLE or uploaded_file is None:
-        return None
-    
-    try:
-        # 创建一个临时文件
-        file_extension = uploaded_file.name.split(".")[-1].lower()
-        with NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp:
-            tmp.write(uploaded_file.getvalue())
-            tmp_path = tmp.name
-        
-        # 使用MarkItDown读取
-        md = MarkItDown()
-        result = md.parse_file(tmp_path)
-        
-        # 删除临时文件
-        os.unlink(tmp_path)
-        
-        return result
-    except Exception as e:
-        st.warning(f"使用MarkItDown读取文件失败: {e}。将使用基本方法。")
-        return None
-
 # 处理上传的文件
 def process_file(uploaded_file):
     if uploaded_file is None:
@@ -223,34 +184,20 @@ def process_file(uploaded_file):
     
     file_extension = uploaded_file.name.split(".")[-1].lower()
     
-    # 首先尝试使用MarkItDown读取（如果可用）
-    if MARKITDOWN_AVAILABLE:
-        result = read_with_markitdown(uploaded_file)
-        if result is not None:
-            return result
-    
-    # 如果MarkItDown不可用或处理失败，使用基本方法
+    # 根据文件类型处理
     if file_extension in ["xlsx", "xls"]:
-        data = read_excel(uploaded_file)
+        return read_excel(uploaded_file)
     elif file_extension == "pdf":
-        data = read_pdf(uploaded_file)
+        return read_pdf(uploaded_file)
     elif file_extension in ["docx", "doc"]:
-        data = read_docx(uploaded_file)
+        return read_docx(uploaded_file)
     elif file_extension in ["txt", "md"]:
-        data = read_text_file(uploaded_file)
+        return read_text_file(uploaded_file)
     elif file_extension in ["jpg", "jpeg", "png", "gif", "bmp"]:
-        data = read_image(uploaded_file)
+        return read_image(uploaded_file)
     else:
         st.warning(f"不支持的文件类型: .{file_extension}")
         return None
-    
-    # 如果是文本类型，尝试提取结构化内容
-    if isinstance(data, str) and data:
-        structured = simple_structured_content(data)
-        if structured and structured.get("has_tables"):
-            return structured
-    
-    return data
 
 # 调用OpenRouter API
 def call_openrouter_api(model, messages):
@@ -343,12 +290,9 @@ def main():
                         elif isinstance(resume_data, dict) and "type" in resume_data and resume_data["type"] == "image":
                             st.image(f"data:image/{resume_data['format'].lower()};base64,{resume_data['base64']}")
                             st.text(f"图片信息: 格式 {resume_data['format']}, 尺寸 {resume_data['size'][0]}x{resume_data['size'][1]}")
-                        elif isinstance(resume_data, dict) and "content" in resume_data:
-                            # 结构化内容
-                            st.markdown(resume_data.get("content", ""))
                         else:
                             # 纯文本
-                            st.text(str(resume_data)[:2000] + "..." if len(str(resume_data)) > 2000 else str(resume_data))
+                            st.markdown(resume_data[:5000] + "..." if len(resume_data) > 5000 else resume_data)
                     
                     # 将数据保存到会话状态
                     st.session_state['resume_data'] = resume_data
@@ -380,12 +324,9 @@ def main():
                             elif isinstance(file_data, dict) and "type" in file_data and file_data["type"] == "image":
                                 st.image(f"data:image/{file_data['format'].lower()};base64,{file_data['base64']}")
                                 st.text(f"图片信息: 格式 {file_data['format']}, 尺寸 {file_data['size'][0]}x{file_data['size'][1]}")
-                            elif isinstance(file_data, dict) and "content" in file_data:
-                                # 结构化内容
-                                st.markdown(file_data.get("content", ""))
                             else:
-                                # 纯文本
-                                st.text(str(file_data)[:1000] + "..." if len(str(file_data)) > 1000 else str(file_data))
+                                # 纯文本或Markdown
+                                st.markdown(file_data[:3000] + "..." if len(str(file_data)) > 3000 else file_data)
                 
                 # 将支持文件数据保存到会话状态
                 st.session_state['support_data'] = support_data
@@ -491,9 +432,6 @@ def main():
                         if "type" in resume_data and resume_data["type"] == "image":
                             # 如果是图片
                             resume_info += f"[这是一张图片文件，格式为{resume_data['format']}，尺寸为{resume_data['size'][0]}x{resume_data['size'][1]}]\n"
-                        elif "content" in resume_data:
-                            # 如果是结构化内容
-                            resume_info += resume_data["content"]
                         else:
                             # 其他字典格式
                             for key, value in resume_data.items():
@@ -517,9 +455,6 @@ def main():
                                 if "type" in content and content["type"] == "image":
                                     # 图片
                                     support_info += f"[这是一张图片文件，格式为{content['format']}，尺寸为{content['size'][0]}x{content['size'][1]}]\n"
-                                elif "content" in content:
-                                    # 结构化内容
-                                    support_info += content["content"]
                                 else:
                                     # 其他字典格式
                                     for key, value in content.items():
