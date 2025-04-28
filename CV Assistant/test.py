@@ -16,7 +16,7 @@ def get_model_list():
     if model_str:
         return [m.strip() for m in model_str.split(",") if m.strip()]
     else:
-        return ["gpt-3.5-turbo", "gpt-4", "qwen-turbo", "glm-4", "其它模型..."]
+        return ["qwen/qwen-max", "deepseek/deepseek-chat-v3-0324:free", "qwen-turbo", "其它模型..."]
 
 with TAB1:
     st.header("上传你的简历素材和支持文件")
