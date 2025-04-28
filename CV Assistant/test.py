@@ -16,6 +16,7 @@ from datetime import datetime
 
 class ChatState(TypedDict):
     messages: List[BaseMessage]
+    support_analysis: str
 
 st.set_page_config(page_title="个人简历写作助手", layout="wide")
 
@@ -56,6 +57,14 @@ if "resume_content" not in st.session_state:
     st.session_state.resume_content = ""
 if "support_files_content" not in st.session_state:
     st.session_state.support_files_content = []
+    
+# 新增：支持文件分析agent的提示词
+if "support_analyst_persona" not in st.session_state:
+    st.session_state.support_analyst_persona = "我是一位专业的支持文件分析师，擅长从各种文档中提取关键信息和经历要点。我会仔细分析文件内容，找出最相关、最有价值的经历、技能和成就，并以清晰的方式组织这些信息。"
+if "support_analyst_task" not in st.session_state:
+    st.session_state.support_analyst_task = "请分析提供的支持文件，提取所有关键的工作经历、项目经验、技能证书和主要成就。将这些内容整理成结构化的关键要点，以便在简历中使用。需要特别关注：时间段、职位名称、公司/机构名称、职责描述、成就和量化结果。"
+if "support_analyst_output_format" not in st.session_state:
+    st.session_state.support_analyst_output_format = "请以markdown格式输出，使用以下结构：\n\n## 工作经历\n- [时间段] [公司名称] - [职位]\n  - 职责/成就1（尽量包含量化结果）\n  - 职责/成就2\n\n## 教育背景\n- [时间段] [学校名称] - [学位/专业]\n\n## 技能与证书\n- 技能分类1：具体技能列表\n- 证书：证书名称及获取时间\n\n## 项目经验\n- [项目名称]：简短描述及成果"
 
 # 获取模型列表（从secrets读取，逗号分隔）
 def get_model_list():
@@ -70,7 +79,11 @@ def save_prompts():
     prompts = {
         "persona": st.session_state.persona,
         "task": st.session_state.task,
-        "output_format": st.session_state.output_format
+        "output_format": st.session_state.output_format,
+        # 新增：支持文件分析agent的提示词
+        "support_analyst_persona": st.session_state.support_analyst_persona,
+        "support_analyst_task": st.session_state.support_analyst_task,
+        "support_analyst_output_format": st.session_state.support_analyst_output_format
     }
     # 创建保存目录
     os.makedirs("prompts", exist_ok=True)
@@ -87,6 +100,10 @@ def load_prompts():
                 st.session_state.persona = prompts.get("persona", "")
                 st.session_state.task = prompts.get("task", "")
                 st.session_state.output_format = prompts.get("output_format", "")
+                # 新增：支持文件分析agent的提示词
+                st.session_state.support_analyst_persona = prompts.get("support_analyst_persona", "")
+                st.session_state.support_analyst_task = prompts.get("support_analyst_task", "")
+                st.session_state.support_analyst_output_format = prompts.get("support_analyst_output_format", "")
             return True
         return False
     except Exception as e:
@@ -105,141 +122,239 @@ def read_file(file):
         return f"[MarkItDown 解析失败: {e}]"
 
 # 处理模型调用
-def process_with_model(model, resume_content, support_files_content, persona, task, output_format):
-    # 准备提示词和文件内容
-    file_contents = f"简历素材内容:\n{resume_content}\n\n"
+def process_with_model(support_analyst_model, cv_assistant_model, resume_content, support_files_content, 
+                      persona, task, output_format, 
+                      support_analyst_persona, support_analyst_task, support_analyst_output_format):
     
-    if support_files_content:
-        file_contents += "支持文件内容:\n"
-        for i, content in enumerate(support_files_content):
-            file_contents += f"--- 文件 {i+1} ---\n{content}\n\n"
+    # 主运行ID
+    main_run_id = str(uuid.uuid4())
     
-    prompt = f"人物设定：{persona}\n\n任务描述：{task}\n\n输出格式：{output_format}\n\n文件内容：\n{file_contents}"
+    # 检查是否有支持文件
+    has_support_files = len(support_files_content) > 0
     
-    with st.spinner("AI 正在处理中..."):
-        try:
-            # 创建唯一的运行ID用于跟踪
-            run_id = str(uuid.uuid4())
+    # 显示处理进度
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # 创建日志区域
+    debug_expander = st.expander("调试信息", expanded=False)
+    
+    try:
+        # 1. 如果有支持文件，先用支持文件分析agent处理
+        support_analysis_result = ""
+        
+        if has_support_files:
+            status_text.text("第一阶段：正在分析支持文件...")
+            with debug_expander:
+                st.write("检测到支持文件，准备调用支持文件分析agent")
+                st.write(f"支持文件数量: {len(support_files_content)}")
             
-            # 创建回调列表
-            callbacks = []
+            # 准备支持文件的内容
+            support_files_text = ""
+            for i, content in enumerate(support_files_content):
+                support_files_text += f"--- 文件 {i+1} ---\n{content}\n\n"
             
-            # 如果启用了LangSmith，记录运行开始
-            if langsmith_client:
-                try:
-                    metadata = {
-                        "model": model,
-                        "action": "generate_cv",
-                        "timestamp": datetime.now()
-                    }
-                    # 直接使用Client API记录运行，而不是通过Tracer
-                    langsmith_client.create_run(
-                        name="简历生成",
-                        run_type="chain",
-                        inputs={"prompt": prompt},
-                        project_name=langsmith_project,
-                        run_id=run_id,
-                        extra=metadata
-                    )
-                except Exception as e:
-                    st.warning(f"LangSmith运行创建失败: {str(e)}")
+            # 构建支持文件分析agent的提示词
+            support_prompt = f"""人物设定：{support_analyst_persona}
+
+任务描述：{support_analyst_task}
+
+输出格式：{support_analyst_output_format}
+
+支持文件内容：
+{support_files_text}
+"""
+            with debug_expander:
+                st.write("### 支持文件分析agent的提示词")
+                st.code(support_prompt, language="markdown")
             
-            # 构建 LangGraph 处理流程
-            def create_cv_graph():
-                # 创建 LLM 节点，使用 ChatOpenAI
-                llm = ChatOpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1",
-                    model=model,
-                    temperature=0.7,
-                    # 不再使用callbacks，因为我们直接使用Client API
-                    # callbacks=callbacks if callbacks else None
+            # 调用支持文件分析agent
+            with debug_expander:
+                st.write(f"开始调用支持文件分析agent，使用模型: {support_analyst_model}")
+            
+            try:
+                support_analysis_result = run_agent(
+                    "supporting_doc_analyst",
+                    support_analyst_model,
+                    support_prompt,
+                    main_run_id
                 )
                 
-                # 定义 LLM 节点处理函数
-                def llm_node(state: ChatState) -> ChatState:
-                    messages = state.get("messages", [])
-                    
-                    # 使用 langchain 的 ChatOpenAI 处理信息
-                    result = llm.invoke(messages)
-                    
-                    # 在LangSmith中记录LLM调用（如果启用）
-                    if langsmith_client:
-                        try:
-                            child_run_id = str(uuid.uuid4())
-                            # 记录LLM子调用
-                            langsmith_client.create_run(
-                                name="LLM调用",
-                                run_type="llm",
-                                inputs={"messages": [m.content for m in messages]},
-                                outputs={"response": result.content},
-                                parent_run_id=run_id,
-                                run_id=child_run_id,
-                                extra={"model": model}
-                            )
-                            # 立即标记为完成
-                            langsmith_client.update_run(
-                                run_id=child_run_id,
-                                end_time=datetime.now()
-                            )
-                        except Exception as e:
-                            st.warning(f"LangSmith子运行记录失败: {str(e)}")
-                    
-                    # 更新状态
-                    return {"messages": messages + [result]}
+                with debug_expander:
+                    st.write("支持文件分析agent返回结果:")
+                    st.write("结果长度:", len(support_analysis_result) if support_analysis_result else 0)
+                    st.code(support_analysis_result[:500] + "..." if len(support_analysis_result) > 500 else support_analysis_result)
                 
-                # 创建图结构，并提供状态架构
-                workflow = StateGraph(ChatState)
-                
-                # 添加自定义 LLM 节点
-                workflow.add_node("generate_cv", llm_node)
-                
-                # 设置入口点
-                workflow.set_entry_point("generate_cv")
-                
-                # 设置流程完成点 - 修复方法调用
-                workflow.add_edge("generate_cv", END)
-                
-                # 编译图为可执行对象
-                return workflow.compile()
+                # 验证第一个agent的输出
+                if not support_analysis_result or len(support_analysis_result.strip()) < 10:
+                    with debug_expander:
+                        st.warning("警告：支持文件分析agent返回的结果为空或太短")
+                    # 仍然继续，但使用原始支持文件
+                    support_analysis_result = "支持文件分析agent未能提供有效分析。以下是原始支持文件内容：\n\n" + support_files_text
             
-            # 初始化图结构
-            cv_chain = create_cv_graph()
+            except Exception as agent1_error:
+                with debug_expander:
+                    st.error(f"支持文件分析agent执行出错: {str(agent1_error)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                # 仍然继续，但使用原始支持文件
+                support_analysis_result = "支持文件分析agent执行出错。以下是原始支持文件内容：\n\n" + support_files_text
             
-            # 准备输入数据，使用langchain的消息格式
-            input_data = {"messages": [HumanMessage(content=prompt)]}
-            
-            # 执行图并获取结果
-            result = cv_chain.invoke(input_data)
-            
-            # 从结果中提取 AI 回复
-            output = result["messages"][-1].content
-            
-            # 在LangSmith中更新主运行结果（如果启用）
-            if langsmith_client:
-                try:
-                    langsmith_client.update_run(
-                        run_id=run_id,
-                        outputs={"response": output},
-                        end_time=datetime.now()
-                    )
-                except Exception as e:
-                    st.warning(f"LangSmith更新运行结果失败: {str(e)}")
-            
-            # 显示回复
-            st.markdown(output, unsafe_allow_html=True)
-            
-            # 显示LangSmith链接（如果启用）
-            if langsmith_api_key:
-                langsmith_base_url = st.secrets.get("LANGSMITH_BASE_URL", "https://smith.langchain.com")
-                langsmith_url = f"{langsmith_base_url}/projects/{langsmith_project}/runs/{run_id}"
-                st.info(f"在LangSmith中查看此运行: [打开监控面板]({langsmith_url})")
+            progress_bar.progress(50)
+            status_text.text("第一阶段完成：支持文件分析完毕")
+        else:
+            progress_bar.progress(50)
+            status_text.text("未提供支持文件，跳过第一阶段分析")
+            with debug_expander:
+                st.write("未检测到支持文件，跳过第一阶段")
         
+        # 2. 准备简历助手的输入
+        status_text.text("第二阶段：正在生成简历...")
+        
+        # 准备简历素材内容
+        file_contents = f"简历素材内容:\n{resume_content}\n\n"
+        
+        # 如果有支持文件分析结果，添加到提示中
+        if has_support_files and support_analysis_result:
+            file_contents += f"支持文件分析结果:\n{support_analysis_result}\n\n"
+            with debug_expander:
+                st.write("已将支持文件分析结果添加到第二阶段输入")
+        
+        # 或者直接添加原始支持文件内容（如果没有分析结果但有支持文件）
+        elif has_support_files:
+            file_contents += "支持文件内容:\n"
+            for i, content in enumerate(support_files_content):
+                file_contents += f"--- 文件 {i+1} ---\n{content}\n\n"
+            with debug_expander:
+                st.write("由于未获得支持文件分析结果，已将原始支持文件内容添加到第二阶段输入")
+        
+        # 构建最终的简历助手提示词
+        cv_prompt = f"""人物设定：{persona}
+
+任务描述：{task}
+
+输出格式：{output_format}
+
+文件内容：
+{file_contents}
+"""
+        with debug_expander:
+            st.write("### 简历助手agent的提示词")
+            st.code(cv_prompt[:1000] + "..." if len(cv_prompt) > 1000 else cv_prompt, language="markdown")
+            st.write(f"开始调用简历助手agent，使用模型: {cv_assistant_model}")
+        
+        # 调用简历助手agent
+        try:
+            final_result = run_agent(
+                "cv_assistant", 
+                cv_assistant_model,
+                cv_prompt,
+                main_run_id
+            )
+            
+            with debug_expander:
+                st.write("简历助手agent返回结果长度:", len(final_result) if final_result else 0)
+        
+        except Exception as agent2_error:
+            with debug_expander:
+                st.error(f"简历助手agent执行出错: {str(agent2_error)}")
+                import traceback
+                st.code(traceback.format_exc())
+            raise  # 重新抛出异常，因为这是关键步骤
+        
+        progress_bar.progress(100)
+        status_text.text("处理完成！")
+        
+        # 显示结果
+        st.markdown(final_result, unsafe_allow_html=True)
+        
+        # 显示LangSmith链接（如果启用）
+        if langsmith_api_key:
+            langsmith_base_url = st.secrets.get("LANGSMITH_BASE_URL", "https://smith.langchain.com")
+            langsmith_url = f"{langsmith_base_url}/projects/{langsmith_project}/runs/{main_run_id}"
+            st.info(f"在LangSmith中查看此运行: [打开监控面板]({langsmith_url})")
+            
+    except Exception as e:
+        progress_bar.progress(100)
+        status_text.text("处理出错！")
+        st.error(f"处理失败: {str(e)}")
+        st.error("详细错误信息：")
+        import traceback
+        st.code(traceback.format_exc())
+
+# 运行单个Agent的函数
+def run_agent(agent_name, model, prompt, parent_run_id=None):
+    # 创建agent运行ID
+    agent_run_id = str(uuid.uuid4())
+    
+    # 创建调试信息
+    debug_info = f"运行 {agent_name} (模型: {model})"
+    print(debug_info)  # 控制台日志
+    
+    # 在LangSmith中记录agent运行开始（如果启用）
+    if langsmith_client and parent_run_id:
+        try:
+            metadata = {
+                "model": model,
+                "agent": agent_name,
+                "timestamp": datetime.now()
+            }
+            # 记录agent运行
+            langsmith_client.create_run(
+                name=f"{agent_name}",
+                run_type="chain",
+                inputs={"prompt": prompt},
+                project_name=langsmith_project,
+                run_id=agent_run_id,
+                parent_run_id=parent_run_id,
+                extra=metadata
+            )
         except Exception as e:
-            st.error(f"LangChain/LangGraph 处理失败: {str(e)}")
-            st.error("详细错误信息：")
-            import traceback
-            st.code(traceback.format_exc())
+            print(f"LangSmith运行创建失败: {str(e)}")
+            st.warning(f"LangSmith运行创建失败: {str(e)}")
+    
+    try:
+        # 创建 LLM 实例
+        llm = ChatOpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            model=model,
+            temperature=0.7,
+        )
+        
+        # 使用 langchain 的 ChatOpenAI 处理信息
+        messages = [HumanMessage(content=prompt)]
+        print(f"发送请求到 {model}...")
+        result = llm.invoke(messages)
+        print(f"收到 {model} 响应，长度: {len(result.content) if result.content else 0}")
+        
+        # 在LangSmith中记录LLM调用（如果启用）
+        if langsmith_client and parent_run_id:
+            try:
+                # 更新agent运行结果
+                langsmith_client.update_run(
+                    run_id=agent_run_id,
+                    outputs={"response": result.content},
+                    end_time=datetime.now()
+                )
+            except Exception as e:
+                print(f"LangSmith更新运行结果失败: {str(e)}")
+                st.warning(f"LangSmith更新运行结果失败: {str(e)}")
+        
+        # 验证返回结果不为空
+        if not result.content or len(result.content.strip()) == 0:
+            error_msg = f"{agent_name} 返回了空结果"
+            print(error_msg)
+            return f"错误: {error_msg}"
+            
+        return result.content
+        
+    except Exception as e:
+        error_msg = f"{agent_name} 执行时出错: {str(e)}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        return f"错误: {error_msg}\n\n请检查API密钥和模型设置是否正确。"
 
 # Tab布局
 TAB1, TAB2 = st.tabs(["文件上传与分析", "提示词与模型设置"])
@@ -257,7 +372,8 @@ with TAB1:
             st.error("请上传简历素材表")
         else:
             # 从session_state获取模型
-            model = st.session_state.get("selected_model", get_model_list()[0])
+            support_analyst_model = st.session_state.get("selected_support_analyst_model", get_model_list()[0])
+            cv_assistant_model = st.session_state.get("selected_cv_assistant_model", get_model_list()[0])
             
             # 读取文件内容
             resume_content = read_file(resume_file)
@@ -272,12 +388,16 @@ with TAB1:
             
             # 处理并显示结果
             process_with_model(
-                model, 
+                support_analyst_model,
+                cv_assistant_model,
                 st.session_state.resume_content, 
                 st.session_state.support_files_content,
                 st.session_state.persona,
                 st.session_state.task,
-                st.session_state.output_format
+                st.session_state.output_format,
+                st.session_state.support_analyst_persona,
+                st.session_state.support_analyst_task,
+                st.session_state.support_analyst_output_format
             )
 
 with TAB2:
@@ -286,33 +406,97 @@ with TAB2:
     # 尝试加载保存的提示词
     load_prompts()
     
-    # 模型选择移到这里
-    st.subheader("选择模型")
-    model_list = get_model_list()
-    selected_model = st.selectbox("选择大模型", model_list)
-    # 将选择的模型保存到session_state
-    st.session_state.selected_model = selected_model
+    # 使用两列布局分别设置两个agent
+    col1, col2 = st.columns(2)
     
-    st.subheader("提示词设置")
+    with col1:
+        st.subheader("支持文件分析 Agent (supporting_doc_analyst)")
+        
+        # 模型选择
+        model_list = get_model_list()
+        selected_support_analyst_model = st.selectbox(
+            "选择支持文件分析模型", 
+            model_list,
+            key="support_analyst_model_selector"
+        )
+        # 将选择的模型保存到session_state
+        st.session_state.selected_support_analyst_model = selected_support_analyst_model
+        
+        # 提示词输入区
+        support_analyst_persona = st.text_area(
+            "人物设定", 
+            value=st.session_state.support_analyst_persona, 
+            placeholder="如：我是一位专业的简历分析师，擅长从各种材料中提取关键经历要点……", 
+            height=120
+        )
+        support_analyst_task = st.text_area(
+            "任务描述", 
+            value=st.session_state.support_analyst_task, 
+            placeholder="如：请分析这些支持文件，提取关键的经历、技能和成就要点……", 
+            height=120
+        )
+        support_analyst_output_format = st.text_area(
+            "输出格式", 
+            value=st.session_state.support_analyst_output_format, 
+            placeholder="如：请用要点列表的形式整理出关键经历，每个要点包含时间、地点、职位、成就……", 
+            height=120
+        )
+        
+        # 更新session state
+        st.session_state.support_analyst_persona = support_analyst_persona
+        st.session_state.support_analyst_task = support_analyst_task
+        st.session_state.support_analyst_output_format = support_analyst_output_format
     
-    # 提示词输入区
-    persona = st.text_area("人物设定", value=st.session_state.persona, placeholder="如：我是应届毕业生，主修计算机科学……", height=150)
-    task = st.text_area("任务描述", value=st.session_state.task, placeholder="如：请根据我的简历素材，生成一份针对XX岗位的简历……", height=150)
-    output_format = st.text_area("输出格式", value=st.session_state.output_format, placeholder="如：请用markdown格式输出，包含以下部分……", height=150)
-    
-    # 简化按钮，只保留一个保存按钮
-    if st.button("保存提示词", use_container_width=True):
+    with col2:
+        st.subheader("简历助手 Agent (cv_assistant)")
+        
+        # 模型选择
+        selected_cv_assistant_model = st.selectbox(
+            "选择简历生成模型", 
+            model_list,
+            key="cv_assistant_model_selector"
+        )
+        # 将选择的模型保存到session_state
+        st.session_state.selected_cv_assistant_model = selected_cv_assistant_model
+        
+        # 提示词输入区
+        persona = st.text_area(
+            "人物设定", 
+            value=st.session_state.persona, 
+            placeholder="如：我是应届毕业生，主修计算机科学……", 
+            height=120
+        )
+        task = st.text_area(
+            "任务描述", 
+            value=st.session_state.task, 
+            placeholder="如：请根据我的简历素材和支持文件分析结果，生成一份针对XX岗位的简历……", 
+            height=120
+        )
+        output_format = st.text_area(
+            "输出格式", 
+            value=st.session_state.output_format, 
+            placeholder="如：请用markdown格式输出，包含以下部分……", 
+            height=120
+        )
+        
         # 更新session state
         st.session_state.persona = persona
         st.session_state.task = task
         st.session_state.output_format = output_format
-        
+    
+    # 保存按钮 (跨两列)
+    if st.button("保存所有提示词", use_container_width=True):
         # 保存到文件
         if save_prompts():
-            st.success("提示词已保存到文件，下次启动应用时会自动加载")
+            st.success("所有提示词已保存到文件，下次启动应用时会自动加载")
             
-    # 添加简短的说明
-    st.info("提示：保存后的提示词会在每次应用启动时自动加载。修改后需点击保存才会生效。")
+    # 添加处理流程说明
+    st.info("""
+    **处理流程说明**:
+    1. 如果上传了支持文件，系统将先使用支持文件分析agent分析这些文件，提取经历要点
+    2. 然后系统将使用简历助手agent，综合分析简历素材表和上一步的分析结果，生成最终简历
+    3. 如果没有上传支持文件，系统将直接使用简历助手agent处理简历素材表
+    """)
 
 # 添加LangSmith状态指示器
 with st.sidebar:
