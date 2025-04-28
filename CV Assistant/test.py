@@ -2,6 +2,11 @@ import streamlit as st
 from markitdown import MarkItDown
 import requests
 import io
+# 添加 langgraph 相关导入
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import OpenAIChatNode
+import openai
+
 st.set_page_config(page_title="个人简历写作助理", layout="wide")
 
 # 读取API KEY
@@ -60,23 +65,49 @@ with TAB2:
         if not api_key:
             st.error("请在 Streamlit secrets 中配置 OPENROUTER_API_KEY")
         else:
+            # 准备 prompt
             prompt = f"人物设定：{persona}\n任务描述：{task}\n输出格式：{output_format}"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=data
-            )
-            if response.status_code == 200:
-                result = response.json()
-                output = result.get("choices", [{}])[0].get("message", {}).get("content", "无返回内容")
-                st.markdown(output)
-            else:
-                st.error(f"API请求失败: {response.text}")
+            
+            with st.spinner("AI 正在处理中..."):
+                try:
+                    # 设置 OpenAI 配置
+                    openai.api_key = api_key
+                    openai.base_url = "https://openrouter.ai/api/v1"
+                    
+                    # 构建 LangGraph 处理流程
+                    def create_cv_graph():
+                        # 创建 LLM 节点
+                        llm_node = OpenAIChatNode(model=model)
+                        
+                        # 创建图结构
+                        workflow = StateGraph()
+                        
+                        # 添加节点
+                        workflow.add_node("generate_cv", llm_node)
+                        
+                        # 设置入口点
+                        workflow.set_entry_point("generate_cv")
+                        
+                        # 设置流程完成点
+                        workflow.set_finish_point("generate_cv", END)
+                        
+                        # 编译图为可执行对象
+                        return workflow.compile()
+                    
+                    # 初始化图结构并执行
+                    cv_chain = create_cv_graph()
+                    
+                    # 准备输入数据
+                    input_data = {"messages": [{"role": "user", "content": prompt}]}
+                    
+                    # 执行图并获取结果
+                    result = cv_chain.invoke(input_data)
+                    
+                    # 从结果中提取 AI 回复
+                    output = result["messages"][-1]["content"]
+                    
+                    # 显示回复
+                    st.markdown(output, unsafe_allow_html=True)
+                
+                except Exception as e:
+                    st.error(f"LangGraph 处理失败: {str(e)}")
