@@ -1,13 +1,65 @@
-import streamlit as st
+# 尝试使用模拟的MarkItDown功能（简单版本）
+def simple_structured_content(text):
+    if not text:
+        return None
+    
+    # 简单的表格检测和格式化
+    lines = text.split('\n')
+    formatted_text = ""
+    
+    # 检测可能的表格部分
+    table_sections = []
+    current_table = []
+    in_table = False
+    
+    for line in lines:
+        # 简单地检测带有多个分隔符的行作为可能的表格
+        if '|' in line or '\t' in line:
+            if not in_table:
+                in_table = True
+            current_table.append(line)
+        else:
+            if in_table and current_table:
+                table_sections.append(current_table)
+                current_table = []
+                in_table = False
+            if line.strip():  # 避免空行
+                formatted_text += line + "\n"
+    
+    # 处理最后一个表格
+    if in_table and current_table:
+        table_sections.append(current_table)
+    
+    # 为检测到的表格部分添加格式
+    for table in table_sections:
+        formatted_text += "\n表格内容:\n"
+        for row in table:
+            # 尝试统一分隔符
+            row = row.replace('\t', ' | ')
+            formatted_text += row + "\n"
+        formatted_text += "\n"
+    
+    return {
+        "content": formatted_text,
+        "has_tables": bool(table_sections)
+    }import streamlit as st
 import os
 import json
 import requests
 import pandas as pd
 import io
-from tempfile import NamedTemporaryFile
-from markitdown import MarkItDown
 import base64
+from tempfile import NamedTemporaryFile
 from PIL import Image
+
+# 尝试导入markitdown，如果失败则记录错误但不中断程序
+try:
+    from markitdown import MarkItDown
+    MARKITDOWN_AVAILABLE = True
+except ImportError:
+    MARKITDOWN_AVAILABLE = False
+    st.warning("markitdown库导入失败，将使用基本文件处理方法。如需更好地处理表格，请安装markitdown: pip install markitdown")
+
 
 # 设置页面标题和配置
 st.set_page_config(
@@ -49,7 +101,11 @@ st.markdown("""
 
 # 从Streamlit Secrets获取API密钥
 def get_api_key():
-    return st.secrets["openrouter_api_key"]
+    try:
+        return st.secrets["openrouter_api_key"]
+    except Exception:
+        # 本地开发时可能没有设置secrets
+        return None
 
 # 读取Excel文件
 def read_excel(uploaded_file):
@@ -60,50 +116,6 @@ def read_excel(uploaded_file):
             st.error(f"无法读取Excel文件: {e}")
             return None
     return None
-
-# 使用MarkItDown读取各种文件并提取结构化内容
-def read_with_markitdown(uploaded_file):
-    if uploaded_file is not None:
-        try:
-            # 创建一个临时文件
-            with NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1].lower()}") as tmp:
-                tmp.write(uploaded_file.getvalue())
-                tmp_path = tmp.name
-            
-            # 使用MarkItDown读取
-            md = MarkItDown()
-            result = md.parse_file(tmp_path)
-            
-            # 删除临时文件
-            os.unlink(tmp_path)
-            
-            return result
-        except Exception as e:
-            st.error(f"使用MarkItDown读取文件失败: {e}")
-            
-            # 如果MarkItDown失败，尝试使用备用方法
-            return read_file_fallback(uploaded_file)
-    return None
-
-# 备用文件读取方法
-def read_file_fallback(uploaded_file):
-    if uploaded_file is None:
-        return None
-    
-    file_extension = uploaded_file.name.split(".")[-1].lower()
-    
-    # 根据文件类型调用不同的读取方法
-    if file_extension in ["txt", "md"]:
-        return read_text_file(uploaded_file)
-    elif file_extension == "pdf":
-        return read_pdf(uploaded_file)
-    elif file_extension in ["docx", "doc"]:
-        return read_docx(uploaded_file)
-    elif file_extension in ["jpg", "jpeg", "png", "gif", "bmp"]:
-        return read_image(uploaded_file)
-    else:
-        st.warning(f"不支持的文件类型: .{file_extension}")
-        return None
 
 # 读取文本文件
 def read_text_file(uploaded_file):
@@ -164,13 +176,13 @@ def read_image(uploaded_file):
             
             # 转换为base64以便在应用中显示
             buffered = io.BytesIO()
-            image.save(buffered, format=image.format)
+            image.save(buffered, format=image.format if image.format else "PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
             # 返回图片信息
             return {
                 "type": "image",
-                "format": image.format,
+                "format": image.format if image.format else "PNG",
                 "size": image.size,
                 "mode": image.mode,
                 "base64": img_str
@@ -180,6 +192,30 @@ def read_image(uploaded_file):
             return None
     return None
 
+# 使用MarkItDown读取文件（如果可用）
+def read_with_markitdown(uploaded_file):
+    if not MARKITDOWN_AVAILABLE or uploaded_file is None:
+        return None
+    
+    try:
+        # 创建一个临时文件
+        file_extension = uploaded_file.name.split(".")[-1].lower()
+        with NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+        
+        # 使用MarkItDown读取
+        md = MarkItDown()
+        result = md.parse_file(tmp_path)
+        
+        # 删除临时文件
+        os.unlink(tmp_path)
+        
+        return result
+    except Exception as e:
+        st.warning(f"使用MarkItDown读取文件失败: {e}。将使用基本方法。")
+        return None
+
 # 处理上传的文件
 def process_file(uploaded_file):
     if uploaded_file is None:
@@ -187,21 +223,43 @@ def process_file(uploaded_file):
     
     file_extension = uploaded_file.name.split(".")[-1].lower()
     
-    # 首先尝试使用MarkItDown读取
-    result = read_with_markitdown(uploaded_file)
+    # 首先尝试使用MarkItDown读取（如果可用）
+    if MARKITDOWN_AVAILABLE:
+        result = read_with_markitdown(uploaded_file)
+        if result is not None:
+            return result
     
-    # 如果MarkItDown失败或返回为None，使用备用方法
-    if result is None:
-        if file_extension in ["xlsx", "xls"]:
-            return read_excel(uploaded_file)
-        else:
-            return read_file_fallback(uploaded_file)
+    # 如果MarkItDown不可用或处理失败，使用基本方法
+    if file_extension in ["xlsx", "xls"]:
+        data = read_excel(uploaded_file)
+    elif file_extension == "pdf":
+        data = read_pdf(uploaded_file)
+    elif file_extension in ["docx", "doc"]:
+        data = read_docx(uploaded_file)
+    elif file_extension in ["txt", "md"]:
+        data = read_text_file(uploaded_file)
+    elif file_extension in ["jpg", "jpeg", "png", "gif", "bmp"]:
+        data = read_image(uploaded_file)
+    else:
+        st.warning(f"不支持的文件类型: .{file_extension}")
+        return None
     
-    return result
+    # 如果是文本类型，尝试提取结构化内容
+    if isinstance(data, str) and data:
+        structured = simple_structured_content(data)
+        if structured and structured.get("has_tables"):
+            return structured
+    
+    return data
 
 # 调用OpenRouter API
 def call_openrouter_api(model, messages):
     api_key = get_api_key()
+    
+    if not api_key:
+        st.error("未找到API密钥。请确保已在Streamlit的secrets中设置了openrouter_api_key。")
+        return None
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -214,21 +272,41 @@ def call_openrouter_api(model, messages):
         "messages": messages
     }
     
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        data=json.dumps(data)
-    )
-    
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"API调用失败: {response.status_code} - {response.text}")
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(data)
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"API调用失败: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"API调用出错: {e}")
         return None
 
 # 主应用
 def main():
     st.title("个人简历写作助理")
+    
+    # 初始化会话状态
+    if 'resume_data' not in st.session_state:
+        st.session_state['resume_data'] = None
+    if 'resume_file_name' not in st.session_state:
+        st.session_state['resume_file_name'] = None
+    if 'support_data' not in st.session_state:
+        st.session_state['support_data'] = {}
+    if 'selected_model' not in st.session_state:
+        st.session_state['selected_model'] = "anthropic/claude-3-5-sonnet"
+    if 'persona' not in st.session_state:
+        st.session_state['persona'] = ""
+    if 'task' not in st.session_state:
+        st.session_state['task'] = ""
+    if 'output_format' not in st.session_state:
+        st.session_state['output_format'] = ""
     
     # 创建两个标签页
     tab1, tab2 = st.tabs(["📄 上传简历素材", "⚙️ 模型设置与提示词"])
@@ -265,8 +343,8 @@ def main():
                         elif isinstance(resume_data, dict) and "type" in resume_data and resume_data["type"] == "image":
                             st.image(f"data:image/{resume_data['format'].lower()};base64,{resume_data['base64']}")
                             st.text(f"图片信息: 格式 {resume_data['format']}, 尺寸 {resume_data['size'][0]}x{resume_data['size'][1]}")
-                        elif isinstance(resume_data, dict) and isinstance(resume_data.get("content"), str):
-                            # 如果是MarkItDown返回的结构化内容
+                        elif isinstance(resume_data, dict) and "content" in resume_data:
+                            # 结构化内容
                             st.markdown(resume_data.get("content", ""))
                         else:
                             # 纯文本
@@ -302,8 +380,8 @@ def main():
                             elif isinstance(file_data, dict) and "type" in file_data and file_data["type"] == "image":
                                 st.image(f"data:image/{file_data['format'].lower()};base64,{file_data['base64']}")
                                 st.text(f"图片信息: 格式 {file_data['format']}, 尺寸 {file_data['size'][0]}x{file_data['size'][1]}")
-                            elif isinstance(file_data, dict) and isinstance(file_data.get("content"), str):
-                                # 如果是MarkItDown返回的结构化内容
+                            elif isinstance(file_data, dict) and "content" in file_data:
+                                # 结构化内容
                                 st.markdown(file_data.get("content", ""))
                             else:
                                 # 纯文本
@@ -336,7 +414,7 @@ def main():
                 "mistralai/mistral-7b"
             ]
             
-            selected_model = st.selectbox("选择要使用的模型", models)
+            selected_model = st.selectbox("选择要使用的模型", models, index=models.index(st.session_state['selected_model']) if st.session_state['selected_model'] in models else 0)
             st.session_state['selected_model'] = selected_model
             
             st.markdown('</div>', unsafe_allow_html=True)
@@ -369,18 +447,18 @@ def main():
         
         with col1:
             persona = st.text_area("人物设定", 
-                                value=default_persona if 'persona' not in st.session_state else st.session_state['persona'],
+                                value=st.session_state['persona'] if st.session_state['persona'] else default_persona,
                                 height=150)
             st.session_state['persona'] = persona
             
             task = st.text_area("任务描述", 
-                              value=default_task if 'task' not in st.session_state else st.session_state['task'],
+                              value=st.session_state['task'] if st.session_state['task'] else default_task,
                               height=250)
             st.session_state['task'] = task
         
         with col2:
             output_format = st.text_area("输出格式", 
-                                       value=default_format if 'output_format' not in st.session_state else st.session_state['output_format'],
+                                       value=st.session_state['output_format'] if st.session_state['output_format'] else default_format,
                                        height=430)
             st.session_state['output_format'] = output_format
         
@@ -389,7 +467,7 @@ def main():
         
         if st.button("开始生成简历", type="primary", use_container_width=True):
             # 检查是否上传了简历素材（必传项）
-            if 'resume_data' not in st.session_state:
+            if 'resume_data' not in st.session_state or st.session_state['resume_data'] is None:
                 st.error("请先上传个人简历素材表！这是必须的。")
             else:
                 with st.spinner("正在生成您的简历，请稍候..."):
@@ -414,7 +492,7 @@ def main():
                             # 如果是图片
                             resume_info += f"[这是一张图片文件，格式为{resume_data['format']}，尺寸为{resume_data['size'][0]}x{resume_data['size'][1]}]\n"
                         elif "content" in resume_data:
-                            # 如果是MarkItDown结构化内容
+                            # 如果是结构化内容
                             resume_info += resume_data["content"]
                         else:
                             # 其他字典格式
@@ -440,7 +518,7 @@ def main():
                                     # 图片
                                     support_info += f"[这是一张图片文件，格式为{content['format']}，尺寸为{content['size'][0]}x{content['size'][1]}]\n"
                                 elif "content" in content:
-                                    # MarkItDown结构化内容
+                                    # 结构化内容
                                     support_info += content["content"]
                                 else:
                                     # 其他字典格式
@@ -460,7 +538,7 @@ def main():
 
 {resume_info}
 
-{support_info}
+{support_info if support_info else '未提供支持文件。'}
 
 请根据以上信息，编写一份专业、有针对性的简历。"""
                     
