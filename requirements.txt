@@ -9,3 +9,4 @@ markitdown[all]
 langgraph
 langchain
 langchain-openai
+langsmith
