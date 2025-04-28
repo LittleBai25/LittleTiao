@@ -1,7 +1,7 @@
 import streamlit as st
 from markitdown import MarkItDown
 import requests
-
+import io
 st.set_page_config(page_title="个人简历写作助理", layout="wide")
 
 # 读取API KEY
@@ -25,9 +25,14 @@ with TAB1:
 
     def read_file(file):
         try:
-            mkd = MarkItDown(file)
-            md_content = mkd.to_markdown()
-            return md_content
+            file_bytes = file.read()
+            # 将 bytes 转换为 BytesIO 对象，这是一个 BinaryIO 类型
+            file_stream = io.BytesIO(file_bytes)
+            
+            md = MarkItDown()
+            # 传递 file_stream 而不是原始字节
+            raw_content = md.convert(file_stream)
+            return raw_content
         except Exception as e:
             return f"[MarkItDown 解析失败: {e}]"
 
