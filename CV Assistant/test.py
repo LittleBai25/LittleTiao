@@ -11,8 +11,8 @@ from langchain_core.messages import BaseMessage
 import json
 import os
 from langsmith import Client
-from langchain_core.tracers import LangChainTracer
 import uuid
+from datetime import datetime
 
 class ChatState(TypedDict):
     messages: List[BaseMessage]
@@ -124,15 +124,25 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
             # 创建回调列表
             callbacks = []
             
-            # 根据最新API添加LangChain追踪（如果启用了LangSmith）
-            if langsmith_api_key:
+            # 如果启用了LangSmith，记录运行开始
+            if langsmith_client:
                 try:
-                    from langchain.callbacks.tracers import LangChainTracer
-                    # 使用新的方式初始化tracer
-                    tracer = LangChainTracer(project_name=langsmith_project)
-                    callbacks.append(tracer)
+                    metadata = {
+                        "model": model,
+                        "action": "generate_cv",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    # 直接使用Client API记录运行，而不是通过Tracer
+                    langsmith_client.create_run(
+                        name="简历生成",
+                        run_type="chain",
+                        inputs={"prompt": prompt},
+                        project_name=langsmith_project,
+                        run_id=run_id,
+                        extra=metadata
+                    )
                 except Exception as e:
-                    st.warning(f"无法创建LangSmith追踪器: {str(e)}")
+                    st.warning(f"LangSmith运行创建失败: {str(e)}")
             
             # 构建 LangGraph 处理流程
             def create_cv_graph():
@@ -142,45 +152,38 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
                     base_url="https://openrouter.ai/api/v1",
                     model=model,
                     temperature=0.7,
-                    # 添加追踪器到回调
-                    callbacks=callbacks if callbacks else None
+                    # 不再使用callbacks，因为我们直接使用Client API
+                    # callbacks=callbacks if callbacks else None
                 )
                 
                 # 定义 LLM 节点处理函数
                 def llm_node(state: ChatState) -> ChatState:
                     messages = state.get("messages", [])
-                    # 在LangSmith中记录请求
-                    if langsmith_client:
-                        try:
-                            metadata = {
-                                "model": model,
-                                "message_count": len(messages),
-                                "action": "generate_cv"
-                            }
-                            langsmith_client.create_run(
-                                name="简历生成",
-                                run_type="llm",
-                                inputs={"messages": [m.content for m in messages]},
-                                project_name=langsmith_project,
-                                run_id=run_id,
-                                extra=metadata
-                            )
-                        except Exception as e:
-                            st.warning(f"LangSmith跟踪错误: {str(e)}")
                     
                     # 使用 langchain 的 ChatOpenAI 处理信息
                     result = llm.invoke(messages)
                     
-                    # 在LangSmith中记录结果
+                    # 在LangSmith中记录LLM调用（如果启用）
                     if langsmith_client:
                         try:
+                            child_run_id = str(uuid.uuid4())
+                            # 记录LLM子调用
+                            langsmith_client.create_run(
+                                name="LLM调用",
+                                run_type="llm",
+                                inputs={"messages": [m.content for m in messages]},
+                                outputs={"response": result.content},
+                                parent_run_id=run_id,
+                                run_id=child_run_id,
+                                extra={"model": model}
+                            )
+                            # 立即标记为完成
                             langsmith_client.update_run(
-                                run_id=run_id,
-                                outputs={"content": result.content},
-                                end_time=None  # 让LangSmith自动计算结束时间
+                                run_id=child_run_id,
+                                end_time=datetime.now().isoformat()
                             )
                         except Exception as e:
-                            st.warning(f"LangSmith更新错误: {str(e)}")
+                            st.warning(f"LangSmith子运行记录失败: {str(e)}")
                     
                     # 更新状态
                     return {"messages": messages + [result]}
@@ -211,6 +214,17 @@ def process_with_model(model, resume_content, support_files_content, persona, ta
             
             # 从结果中提取 AI 回复
             output = result["messages"][-1].content
+            
+            # 在LangSmith中更新主运行结果（如果启用）
+            if langsmith_client:
+                try:
+                    langsmith_client.update_run(
+                        run_id=run_id,
+                        outputs={"response": output},
+                        end_time=datetime.now().isoformat()
+                    )
+                except Exception as e:
+                    st.warning(f"LangSmith更新运行结果失败: {str(e)}")
             
             # 显示回复
             st.markdown(output, unsafe_allow_html=True)
