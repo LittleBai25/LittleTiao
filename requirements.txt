@@ -16,3 +16,4 @@ langchain-anthropic==0.0.11
 langchain-openai==0.0.6
 zhipuai==2.0.3
 beautifulsoup4==4.12.2
+openai
