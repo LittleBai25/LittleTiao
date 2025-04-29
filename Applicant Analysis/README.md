@@ -1,105 +1,105 @@
 # Applicant Analysis Tool
 
-An AI-powered application for analyzing applicant competitiveness and recommending suitable UCL programs.
+通过AI驱动的应用程序分析申请人竞争力并推荐合适的UCL项目。
 
-## Features
+## 功能特点
 
-- **Transcript Analysis**: Upload a transcript image and get automatic analysis using Qwen 2.5 VL vision-language model
-- **Competitiveness Analysis**: Get a detailed analysis of academic competitiveness from multiple AI model options
-- **Program Recommendations**: Receive personalized UCL program recommendations based on your profile
-- **Web Search Integration**: Uses Serper MCP server to search for up-to-date information about UCL programs
-- **Prompt Debugging**: Fine-tune the prompts used by the AI agents to customize the analysis
-- **Multiple LLM Support**: Select from various models for analysis and recommendations
+- **成绩单分析**：上传成绩单图片，通过OpenRouter访问Qwen 2.5 VL视觉语言模型自动进行分析
+- **竞争力分析**：通过多种可选AI模型获取详细的学术竞争力分析
+- **项目推荐**：基于个人档案获取个性化的UCL项目推荐
+- **网络搜索集成**：使用Serper MCP服务器搜索有关UCL项目的最新信息
+- **提示词调试**：微调AI代理使用的提示词以自定义分析
+- **多LLM支持**：通过OpenRouter选择各种模型进行分析和推荐
 
-## Supported Models
+## 支持的模型
 
-### Transcript Analyzer
-- Fixed: **qwen/qwen2.5-vl-72b-instruct** (specialized for visual document analysis)
+### 成绩单分析器
+- 固定使用：**qwen/qwen2.5-vl-72b-instruct**（通过OpenRouter访问，专门用于视觉文档分析）
 
-### Competitiveness Analyst & Consulting Assistant
-- qwen/qwen-max
-- qwen/qwen3-32b:free
-- deepseek/deepseek-chat-v3-0324:free
-- anthropic/claude-3.7-sonnet
-- openai/gpt-4.1
+### 竞争力分析和咨询助手
+- anthropic/claude-3-5-sonnet
+- anthropic/claude-3-haiku
+- google/gemini-1.5-pro
+- mistralai/mistral-large
+- meta-llama/llama-3-70b-instruct
 
-## Requirements
+## 技术要求
 
 - Python 3.8+
 - Streamlit
 - LangChain
-- MCP Client (for Serper integration)
-- API keys for various services (see Setup section)
+- MCP Client（用于Serper集成）
+- 各种服务的API密钥（参见安装部分）
 
-## Installation
+## 安装步骤
 
-1. Clone this repository
-2. Install the required packages:
+1. 克隆此存储库
+2. 安装所需的软件包：
    ```
    pip install -r requirements.txt
    ```
-3. Set up your API keys as Streamlit secrets (create a `.streamlit/secrets.toml` file):
+3. 设置API密钥作为Streamlit secrets（创建`.streamlit/secrets.toml`文件）：
    ```toml
-   QWEN_API_KEY = "your_qwen_api_key"
-   OPENAI_API_KEY = "your_openai_api_key"
-   ANTHROPIC_API_KEY = "your_anthropic_api_key"
-   DEEPSEEK_API_KEY = "your_deepseek_api_key"
+   # OpenRouter API (用于访问所有LLM模型，包括视觉模型)
+   OPENROUTER_API_KEY = "your_openrouter_api_key"
+   
+   # Serper Web搜索 API (用于项目推荐)
    SERPER_API_KEY = "your_serper_api_key"
    SMITHERY_API_KEY = "your_smithery_api_key"
    ```
 
-## Usage
+## 使用方法
 
-1. Run the Streamlit application:
+1. 运行Streamlit应用程序：
    ```
    streamlit run app.py
    ```
-2. Open your web browser and navigate to the URL displayed in the terminal (usually `http://localhost:8501`)
-3. In the "Competitiveness Analysis" tab:
-   - Select your university
-   - Enter your major
-   - Select your predicted degree classification
-   - Choose AI models for analysis and recommendations
-   - Upload your transcript image
-   - Click "Submit" to start the complete analysis process
-4. The system will automatically:
-   - Extract and display transcript data using Qwen 2.5 VL
-   - Generate a competitiveness analysis report with your selected model
-   - Provide UCL program recommendations based on the analysis
-5. In the "Prompt Debugging" tab:
-   - Modify prompts for all agents to customize their behavior
-   - Save your changes for future use
+2. 在浏览器中打开终端中显示的URL（通常为`http://localhost:8501`）
+3. 在"竞争力分析"选项卡中：
+   - 选择您的大学
+   - 输入您的专业
+   - 选择预测的学位分类
+   - 为分析和推荐选择AI模型
+   - 上传您的成绩单图片
+   - 点击"提交"开始完整的分析过程
+4. 系统将自动：
+   - 使用Qwen 2.5 VL提取并显示成绩单数据
+   - 使用您选择的模型生成竞争力分析报告
+   - 基于分析提供UCL项目推荐
+5. 在"提示词调试"选项卡中：
+   - 修改所有代理的提示词以自定义其行为
+   - 保存更改以供将来使用
 
-## Workflow
+## 工作流程
 
-The application follows this workflow:
+应用程序遵循以下工作流程：
 
-1. **Transcript Analysis**: Qwen 2.5 VL extracts structured data from the uploaded transcript image
-2. **Competitiveness Analysis**: The selected LLM analyzes the student's profile and generates a competitiveness report
-3. **Program Recommendations**: The second LLM searches for and recommends suitable UCL programs
+1. **成绩单分析**：Qwen 2.5 VL从上传的成绩单图片中提取结构化数据
+2. **竞争力分析**：选定的LLM分析学生的档案并生成竞争力报告
+3. **项目推荐**：第二个LLM搜索并推荐合适的UCL项目
 
-## Serper MCP Server Integration
+## Serper MCP服务器集成
 
-The application uses the Serper MCP server to perform web searches for UCL program information. This integration:
+应用程序使用Serper MCP服务器执行UCL项目信息的Web搜索。此集成：
 
-1. Allows for real-time, up-to-date program information
-2. Provides more accurate program recommendations based on current UCL offerings
-3. Falls back to mock data if the search fails or API keys are not configured
+1. 允许获取实时、最新的项目信息
+2. 根据当前UCL提供的内容提供更准确的项目推荐
+3. 如果搜索失败或API密钥未配置，则回退到模拟数据
 
-## Development Notes
+## 开发说明
 
-The application is structured as follows:
+应用程序的结构如下：
 
-- `app.py`: Main Streamlit application
-- `agents/`: AI agents for different tasks
-  - `transcript_analyzer.py`: Extracts data from transcript images using Qwen 2.5 VL
-  - `competitiveness_analyst.py`: Analyzes student competitiveness
-  - `consulting_assistant.py`: Recommends UCL programs based on competitiveness
-  - `serper_client.py`: Client for the Serper MCP server integration
-- `config/`: Configuration files
-  - `prompts.py`: Manages prompt loading and saving
-  - `prompts.json`: Stores the current prompts (created automatically)
+- `app.py`：主Streamlit应用程序
+- `agents/`：用于不同任务的AI代理
+  - `transcript_analyzer.py`：使用Qwen 2.5 VL从成绩单图片中提取数据
+  - `competitiveness_analyst.py`：分析学生竞争力
+  - `consulting_assistant.py`：基于竞争力推荐UCL项目
+  - `serper_client.py`：Serper MCP服务器集成的客户端
+- `config/`：配置文件
+  - `prompts.py`：管理提示词加载和保存
+  - `prompts.json`：存储当前提示词（自动创建）
 
-## License
+## 许可证
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+该项目根据MIT许可证授权 - 参见LICENSE文件了解详情。 
