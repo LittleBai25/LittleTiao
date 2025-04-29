@@ -27,6 +27,10 @@ if "transcript_content" not in st.session_state:
     st.session_state.transcript_content = None
 if "serper_initialized" not in st.session_state:
     st.session_state.serper_initialized = False
+if "analyst_model" not in st.session_state:
+    st.session_state.analyst_model = "anthropic/claude-3-5-sonnet"
+if "consultant_model" not in st.session_state:
+    st.session_state.consultant_model = "anthropic/claude-3-5-sonnet"
 
 # Check if necessary API keys are set
 def check_api_keys():
@@ -82,22 +86,6 @@ def main():
                 ["First Class", "Upper Second Class", "Lower Second Class", "Third Class"]
             )
             
-            # Model selection for CompetitivenessAnalyst
-            analyst_model = st.selectbox(
-                "Select Model for Competitiveness Analysis",
-                SUPPORTED_MODELS,
-                index=0,
-                key="analyst_model_select"
-            )
-            
-            # Model selection for ConsultingAssistant
-            consultant_model = st.selectbox(
-                "Select Model for Program Recommendations",
-                SUPPORTED_MODELS,
-                index=0,
-                key="consultant_model_select"
-            )
-            
             # Transcript upload (only image formats)
             transcript_file = st.file_uploader(
                 "Upload Your Transcript (Image format only)",
@@ -109,6 +97,10 @@ def main():
         
         # Process the form submission
         if submitted and transcript_file is not None and major:
+            # 从session state获取模型选择
+            analyst_model = st.session_state.analyst_model
+            consultant_model = st.session_state.consultant_model
+            
             # First step: Process the transcript with TranscriptAnalyzer
             with st.spinner("Analyzing transcript with Qwen 2.5 VL via OpenRouter..."):
                 # Save and display the uploaded image
@@ -164,7 +156,36 @@ def main():
                 st.markdown(st.session_state.project_recommendations)
     
     with tab2:
-        st.title("Prompt Debugging")
+        st.title("AI Model & Prompt Configuration")
+        
+        # 添加模型选择到提示词调试页面顶部
+        st.subheader("Model Selection")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Model selection for CompetitivenessAnalyst
+            analyst_model = st.selectbox(
+                "Select Model for Competitiveness Analysis",
+                SUPPORTED_MODELS,
+                index=SUPPORTED_MODELS.index(st.session_state.analyst_model) if st.session_state.analyst_model in SUPPORTED_MODELS else 0,
+                key="analyst_model_debug"
+            )
+            st.session_state.analyst_model = analyst_model
+            
+        with col2:
+            # Model selection for ConsultingAssistant
+            consultant_model = st.selectbox(
+                "Select Model for Program Recommendations",
+                SUPPORTED_MODELS,
+                index=SUPPORTED_MODELS.index(st.session_state.consultant_model) if st.session_state.consultant_model in SUPPORTED_MODELS else 0,
+                key="consultant_model_debug"
+            )
+            st.session_state.consultant_model = consultant_model
+        
+        # 添加模型选择说明
+        st.info("这些模型设置将应用于竞争力分析和项目推荐。您的选择将保存在会话中。")
+        
+        st.markdown("---")
         
         # Load current prompts
         prompts = load_prompts()
@@ -188,15 +209,8 @@ def main():
         consultant_task = st.text_area("Task Description", prompts["consultant"]["task"], height=200)
         consultant_output = st.text_area("Output Format", prompts["consultant"]["output"], height=200)
         
-        # 创建一个使用st.form的表单
-        with st.form("prompt_form"):
-            # 隐藏字段，仅用于存储表单数据
-            st.text_input("Hidden", value="", key="hidden_field", label_visibility="collapsed")
-            # 提交按钮
-            prompt_submitted = st.form_submit_button("Save Prompts")
-        
-        # 处理表单提交
-        if prompt_submitted:
+        # 保存按钮，不使用表单
+        if st.button("Save Prompts"):
             # Update prompts dictionary
             prompts["analyst"]["role"] = analyst_role
             prompts["analyst"]["task"] = analyst_task
@@ -229,16 +243,12 @@ def main():
         # Serper MCP server status
         st.subheader("Serper MCP Server")
         
-        # 用表单包装Serper初始化按钮
-        with st.form("serper_form"):
-            st.text_input("Hidden", value="", key="serper_hidden_field", label_visibility="collapsed")
-            serper_submit = st.form_submit_button("初始化 Serper 客户端")
-        
-        # 处理初始化Serper
-        if serper_submit and not st.session_state.serper_initialized:
-            with st.spinner("正在初始化 Serper 客户端..."):
-                import asyncio
-                asyncio.run(init_serper())
+        # 初始化Serper客户端按钮，不使用表单
+        if not st.session_state.serper_initialized:
+            if st.button("初始化 Serper 客户端"):
+                with st.spinner("正在初始化 Serper 客户端..."):
+                    import asyncio
+                    asyncio.run(init_serper())
         
         # Display Serper client status
         if st.session_state.serper_initialized:
