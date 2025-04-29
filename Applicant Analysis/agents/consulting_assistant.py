@@ -7,6 +7,7 @@ from langchain.chains import LLMChain
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from config.prompts import load_prompts
+from agents.serper_client import SerperClient
 
 class ConsultingAssistant:
     """
@@ -18,6 +19,9 @@ class ConsultingAssistant:
         """Initialize the Consulting Assistant agent with default settings."""
         self.prompts = load_prompts()["consultant"]
         self.model_name = self.prompts.get("model", "gpt-4-turbo")
+        
+        # Initialize the Serper client for web search
+        self.serper_client = SerperClient()
         
         # We'd initialize the LLM here, but we'll mock it for development
         # In a real implementation, you would use the appropriate client for your chosen model
@@ -33,10 +37,26 @@ class ConsultingAssistant:
         Returns:
             List of program information dictionaries
         """
-        # In a real implementation, you would call the UCL website API or scrape the website
-        # For now, we'll return mock data
+        # Use the Serper client to search for programs
+        try:
+            # Run the async search method synchronously
+            programs = self.serper_client.run_async(
+                self.serper_client.search_ucl_programs(keywords)
+            )
+            return programs if programs else self.get_mock_programs()
+        except Exception as e:
+            print(f"Error using Serper for UCL program search: {e}")
+            # Fall back to mock data if search fails
+            return self.get_mock_programs()
+    
+    def get_mock_programs(self) -> List[Dict[str, str]]:
+        """
+        Get mock program data as a fallback when web search fails.
         
-        # Mock program data - in production, replace with actual web scraping
+        Returns:
+            List of mock program information dictionaries
+        """
+        # Mock program data
         mock_programs = [
             {
                 "department": "Department of Computer Science",
@@ -108,7 +128,7 @@ class ConsultingAssistant:
         # Extract keywords from the report
         keywords = self.extract_keywords_from_report(competitiveness_report)
         
-        # Search for matching programs
+        # Search for matching programs using Serper web search
         programs = self.search_ucl_programs(keywords)
         
         # Generate recommendations using LLM
