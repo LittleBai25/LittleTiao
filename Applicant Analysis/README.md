@@ -17,11 +17,11 @@
 - 固定使用：**qwen/qwen2.5-vl-72b-instruct**（通过OpenRouter访问，专门用于视觉文档分析）
 
 ### 竞争力分析和咨询助手
-- anthropic/claude-3-5-sonnet
-- anthropic/claude-3-haiku
-- google/gemini-1.5-pro
-- mistralai/mistral-large
-- meta-llama/llama-3-70b-instruct
+- qwen/qwen-max
+- qwen/qwen3-32b:free
+- deepseek/deepseek-chat-v3-0324:free
+- anthropic/claude-3.7-sonnet
+- openai/gpt-4.1
 
 ## 技术要求
 
@@ -59,16 +59,15 @@
    - 选择您的大学
    - 输入您的专业
    - 选择预测的学位分类
-   - 为分析和推荐选择AI模型
    - 上传您的成绩单图片
    - 点击"提交"开始完整的分析过程
-4. 系统将自动：
+4. 在"AI模型和提示词配置"选项卡中：
+   - 为竞争力分析和项目推荐选择AI模型
+   - 根据需要修改提示词以自定义AI响应
+5. 系统将自动：
    - 使用Qwen 2.5 VL提取并显示成绩单数据
    - 使用您选择的模型生成竞争力分析报告
    - 基于分析提供UCL项目推荐
-5. 在"提示词调试"选项卡中：
-   - 修改所有代理的提示词以自定义其行为
-   - 保存更改以供将来使用
 
 ## 工作流程
 
