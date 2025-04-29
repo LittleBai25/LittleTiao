@@ -3,13 +3,10 @@ import json
 import base64
 import asyncio
 from typing import Dict, Any, List, Optional
+import streamlit as st
 
 import mcp
 from mcp.client.websocket import websocket_client
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 class SerperClient:
     """
@@ -18,10 +15,10 @@ class SerperClient:
     """
     
     def __init__(self):
-        """Initialize the Serper MCP client with configuration from environment variables."""
-        # Get API keys from environment variables
-        self.serper_api_key = os.getenv("SERPER_API_KEY", "")
-        self.smithery_api_key = os.getenv("SMITHERY_API_KEY", "")
+        """Initialize the Serper MCP client with configuration from Streamlit secrets."""
+        # Get API keys from Streamlit secrets
+        self.serper_api_key = st.secrets.get("SERPER_API_KEY", "")
+        self.smithery_api_key = st.secrets.get("SMITHERY_API_KEY", "")
         
         # Server config
         self.config = {
@@ -51,7 +48,7 @@ class SerperClient:
                     self.available_tools = [t.name for t in tools_result.tools]
                     return True
         except Exception as e:
-            print(f"Error initializing Serper MCP client: {e}")
+            st.error(f"Error initializing Serper MCP client: {e}")
             return False
     
     async def search_web(self, query: str) -> Dict[str, Any]:
@@ -79,7 +76,7 @@ class SerperClient:
                     
                     return result.result if hasattr(result, 'result') else {}
         except Exception as e:
-            print(f"Error performing web search: {e}")
+            st.error(f"Error performing web search: {e}")
             return {"error": str(e)}
     
     async def search_ucl_programs(self, keywords: List[str]) -> List[Dict[str, str]]:
@@ -125,7 +122,7 @@ class SerperClient:
             
             return programs
         except Exception as e:
-            print(f"Error searching UCL programs: {e}")
+            st.error(f"Error searching UCL programs: {e}")
             return []
     
     def run_async(self, coroutine):
