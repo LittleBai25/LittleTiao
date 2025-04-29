@@ -32,12 +32,9 @@ if "serper_initialized" not in st.session_state:
 def check_api_keys():
     """Check if the necessary API keys are set in Streamlit secrets."""
     api_keys = {
+        "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", None),
         "SERPER_API_KEY": st.secrets.get("SERPER_API_KEY", None),
-        "SMITHERY_API_KEY": st.secrets.get("SMITHERY_API_KEY", None),
-        "QWEN_API_KEY": st.secrets.get("QWEN_API_KEY", None),
-        "OPENAI_API_KEY": st.secrets.get("OPENAI_API_KEY", None),
-        "ANTHROPIC_API_KEY": st.secrets.get("ANTHROPIC_API_KEY", None),
-        "DEEPSEEK_API_KEY": st.secrets.get("DEEPSEEK_API_KEY", None)
+        "SMITHERY_API_KEY": st.secrets.get("SMITHERY_API_KEY", None)
     }
     
     return {k: bool(v) for k, v in api_keys.items()}
@@ -104,7 +101,7 @@ def main():
         # Process the form submission
         if submitted and transcript_file is not None and major:
             # First step: Process the transcript with TranscriptAnalyzer
-            with st.spinner("Analyzing transcript with Qwen 2.5 VL..."):
+            with st.spinner("Analyzing transcript with Qwen 2.5 VL via OpenRouter..."):
                 # Save and display the uploaded image
                 image = Image.open(transcript_file)
                 st.image(image, caption="Uploaded Transcript", use_column_width=True)
@@ -119,7 +116,7 @@ def main():
                 st.text_area("Transcript Content", transcript_content, height=200, disabled=True)
             
             # Second step: Generate competitiveness report
-            with st.spinner(f"Generating competitiveness report with {analyst_model}..."):
+            with st.spinner(f"Generating competitiveness report with {analyst_model} via OpenRouter..."):
                 analyst = CompetitivenessAnalyst(model_name=analyst_model)
                 st.session_state.competitiveness_report = analyst.generate_report(
                     university=university,
@@ -133,7 +130,7 @@ def main():
                 st.markdown(st.session_state.competitiveness_report)
             
             # Third step: Generate program recommendations
-            with st.spinner(f"Generating program recommendations with {consultant_model}..."):
+            with st.spinner(f"Generating program recommendations with {consultant_model} via OpenRouter..."):
                 consultant = ConsultingAssistant(model_name=consultant_model)
                 st.session_state.project_recommendations = consultant.recommend_projects(
                     competitiveness_report=st.session_state.competitiveness_report
@@ -165,9 +162,9 @@ def main():
         
         st.subheader("Transcript Analyzer Settings")
         st.markdown("""
-        The Transcript Analyzer uses a fixed model: **qwen/qwen2.5-vl-72b-instruct**
+        The Transcript Analyzer uses Qwen 2.5 VL (qwen/qwen2.5-vl-72b-instruct) via OpenRouter.
         
-        This model cannot be changed as it's specifically tuned for visual document analysis.
+        This model is specifically tuned for visual document analysis and transcript data extraction.
         """)
         
         st.subheader("Competitiveness Analyst (Agent 1)")
@@ -195,7 +192,7 @@ def main():
             
             # Save updated prompts
             save_prompts(prompts)
-            st.success("Prompts saved successfully!")
+            st.success("提示词已成功保存！")
 
     with tab3:
         st.title("System Status")
@@ -207,7 +204,7 @@ def main():
         
         # Display API key status as a table
         status_data = [
-            {"API Key": key, "Status": "✅ Set" if status else "❌ Not Set"} 
+            {"API Key": key, "Status": "✅ 已设置" if status else "❌ 未设置"} 
             for key, status in api_key_status.items()
         ]
         
@@ -218,42 +215,42 @@ def main():
         
         # Initialize the Serper client if not already initialized
         if not st.session_state.serper_initialized:
-            if st.button("Initialize Serper Client"):
-                with st.spinner("Initializing Serper client..."):
+            if st.button("初始化 Serper 客户端"):
+                with st.spinner("正在初始化 Serper 客户端..."):
                     import asyncio
                     asyncio.run(init_serper())
         
         # Display Serper client status
         if st.session_state.serper_initialized:
-            st.success("✅ Serper client initialized successfully")
+            st.success("✅ Serper 客户端已成功初始化")
         else:
-            st.warning("⚠️ Serper client not initialized. Click the button above to initialize.")
+            st.warning("⚠️ Serper 客户端未初始化。点击上方按钮进行初始化。")
         
         # Add some help text
         st.markdown("""
-        ### API Keys Configuration
+        ### API 密钥配置
         
-        This application uses Streamlit secrets for API keys. To configure the API keys:
+        本应用使用 Streamlit secrets 存储 API 密钥。配置 API 密钥的步骤：
         
-        1. Create a `.streamlit/secrets.toml` file with your API keys:
+        1. 创建 `.streamlit/secrets.toml` 文件并添加您的 API 密钥：
            ```toml
-           QWEN_API_KEY = "your_qwen_api_key"
-           OPENAI_API_KEY = "your_openai_api_key"
-           ANTHROPIC_API_KEY = "your_anthropic_api_key"
-           DEEPSEEK_API_KEY = "your_deepseek_api_key"
+           # OpenRouter API (用于访问所有LLM模型，包括视觉模型)
+           OPENROUTER_API_KEY = "your_openrouter_api_key"
+           
+           # Serper Web搜索 API (用于项目推荐)
            SERPER_API_KEY = "your_serper_api_key"
            SMITHERY_API_KEY = "your_smithery_api_key"
            ```
         
-        2. For Streamlit Cloud deployment, add these secrets in the Streamlit Cloud dashboard
+        2. 对于 Streamlit Cloud 部署，在 Streamlit Cloud 控制面板中添加这些密钥
         
-        ### Troubleshooting
+        ### 常见问题排查
         
-        If you're experiencing issues:
+        如果遇到问题：
         
-        1. Make sure all required API keys are set in the Streamlit secrets
-        2. Check the console for any error messages
-        3. Ensure you have an active internet connection for web search functionality
+        1. 确保所有必需的 API 密钥都已在 Streamlit secrets 中设置
+        2. 检查控制台是否有错误消息
+        3. 确保您有有效的互联网连接，以便进行 Web 搜索功能
         """)
 
 if __name__ == "__main__":
