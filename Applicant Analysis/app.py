@@ -47,6 +47,15 @@ async def init_serper():
     st.session_state.serper_initialized = result
     return result
 
+# 支持的模型列表
+SUPPORTED_MODELS = [
+    "anthropic/claude-3-5-sonnet",
+    "anthropic/claude-3-haiku",
+    "google/gemini-1.5-pro",
+    "mistralai/mistral-large",
+    "meta-llama/llama-3-70b-instruct"
+]
+
 # Main function
 def main():
     # Create tabs
@@ -55,7 +64,7 @@ def main():
     with tab1:
         st.title("Applicant Competitiveness Analysis Tool")
         
-        # Form for user inputs (without the "Start Competitiveness Analysis" button)
+        # Form for user inputs
         with st.form("input_form"):
             # University selection (currently only one option)
             university = st.selectbox(
@@ -76,7 +85,7 @@ def main():
             # Model selection for CompetitivenessAnalyst
             analyst_model = st.selectbox(
                 "Select Model for Competitiveness Analysis",
-                CompetitivenessAnalyst.SUPPORTED_MODELS,
+                SUPPORTED_MODELS,
                 index=0,
                 key="analyst_model_select"
             )
@@ -84,7 +93,7 @@ def main():
             # Model selection for ConsultingAssistant
             consultant_model = st.selectbox(
                 "Select Model for Program Recommendations",
-                ConsultingAssistant.SUPPORTED_MODELS,
+                SUPPORTED_MODELS,
                 index=0,
                 key="consultant_model_select"
             )
@@ -179,8 +188,15 @@ def main():
         consultant_task = st.text_area("Task Description", prompts["consultant"]["task"], height=200)
         consultant_output = st.text_area("Output Format", prompts["consultant"]["output"], height=200)
         
-        # Save button
-        if st.button("Save Prompts"):
+        # 创建一个使用st.form的表单
+        with st.form("prompt_form"):
+            # 隐藏字段，仅用于存储表单数据
+            st.text_input("Hidden", value="", key="hidden_field", label_visibility="collapsed")
+            # 提交按钮
+            prompt_submitted = st.form_submit_button("Save Prompts")
+        
+        # 处理表单提交
+        if prompt_submitted:
             # Update prompts dictionary
             prompts["analyst"]["role"] = analyst_role
             prompts["analyst"]["task"] = analyst_task
@@ -213,12 +229,16 @@ def main():
         # Serper MCP server status
         st.subheader("Serper MCP Server")
         
-        # Initialize the Serper client if not already initialized
-        if not st.session_state.serper_initialized:
-            if st.button("初始化 Serper 客户端"):
-                with st.spinner("正在初始化 Serper 客户端..."):
-                    import asyncio
-                    asyncio.run(init_serper())
+        # 用表单包装Serper初始化按钮
+        with st.form("serper_form"):
+            st.text_input("Hidden", value="", key="serper_hidden_field", label_visibility="collapsed")
+            serper_submit = st.form_submit_button("初始化 Serper 客户端")
+        
+        # 处理初始化Serper
+        if serper_submit and not st.session_state.serper_initialized:
+            with st.spinner("正在初始化 Serper 客户端..."):
+                import asyncio
+                asyncio.run(init_serper())
         
         # Display Serper client status
         if st.session_state.serper_initialized:
