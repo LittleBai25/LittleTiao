@@ -6,6 +6,7 @@ An AI-powered application for analyzing applicant competitiveness and recommendi
 
 - **Competitiveness Analysis**: Upload a transcript image and get a detailed analysis of your academic competitiveness
 - **Program Recommendations**: Receive personalized UCL program recommendations based on your profile
+- **Web Search Integration**: Uses Serper MCP server to search for up-to-date information about UCL programs
 - **Prompt Debugging**: Fine-tune the prompts used by the AI agents to customize the analysis
 
 ## Requirements
@@ -13,7 +14,8 @@ An AI-powered application for analyzing applicant competitiveness and recommendi
 - Python 3.8+
 - Streamlit
 - LangChain
-- An API key for the AI model(s) you plan to use (e.g., OpenAI, Anthropic, Qwen)
+- MCP Client (for Serper integration)
+- API keys for various services (see Setup section)
 
 ## Installation
 
@@ -32,6 +34,10 @@ An AI-powered application for analyzing applicant competitiveness and recommendi
    
    # For Qwen models
    export QWEN_API_KEY=your_api_key_here
+   
+   # For Serper MCP server
+   export SERPER_API_KEY=your_serper_api_key_here
+   export SMITHERY_API_KEY=your_smithery_api_key_here
    ```
 
 ## Usage
@@ -53,6 +59,19 @@ An AI-powered application for analyzing applicant competitiveness and recommendi
    - Choose different AI models
    - Save your changes for future use
 
+## Serper MCP Server Integration
+
+The application uses the Serper MCP server to perform web searches for UCL program information. This integration:
+
+1. Allows for real-time, up-to-date program information
+2. Provides more accurate program recommendations based on current UCL offerings
+3. Falls back to mock data if the search fails or API keys are not configured
+
+To configure the Serper MCP server:
+1. Obtain API keys for Serper and Smithery
+2. Set the API keys as environment variables (see Installation section)
+3. The application will automatically use these keys to connect to the server
+
 ## Development Notes
 
 The application is structured as follows:
@@ -61,6 +80,7 @@ The application is structured as follows:
 - `agents/`: AI agents for different tasks
   - `competitiveness_analyst.py`: Analyzes transcript and generates competitiveness report
   - `consulting_assistant.py`: Recommends UCL programs based on competitiveness
+  - `serper_client.py`: Client for the Serper MCP server integration
 - `config/`: Configuration files
   - `prompts.py`: Manages prompt loading and saving
   - `prompts.json`: Stores the current prompts (created automatically)
