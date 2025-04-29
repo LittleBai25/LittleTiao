@@ -123,12 +123,13 @@ class ConsultingAssistant:
         
         return keywords
     
-    def recommend_projects(self, competitiveness_report: str) -> str:
+    def recommend_projects(self, competitiveness_report: str, custom_requirements: str = "") -> str:
         """
         Generate program recommendations based on the competitiveness report.
         
         Args:
             competitiveness_report: The competitiveness analysis report
+            custom_requirements: Optional custom requirements or questions from the user
             
         Returns:
             Formatted program recommendations
@@ -139,6 +140,16 @@ class ConsultingAssistant:
             
             # Search for matching programs using Serper web search
             programs = self.search_ucl_programs(keywords)
+            
+            # 准备自定义需求部分（如果有）
+            custom_req_text = ""
+            if custom_requirements and custom_requirements.strip():
+                custom_req_text = f"""
+                Additional Student Requirements/Questions:
+                {custom_requirements}
+                
+                Please address these specific requirements/questions in your recommendations.
+                """
             
             # Generate recommendations using LLM via OpenRouter
             prompt = f"""
@@ -151,6 +162,7 @@ class ConsultingAssistant:
             
             Available UCL Programs:
             {json.dumps(programs, indent=2)}
+            {custom_req_text}
             
             {self.prompts['output']}
             """
