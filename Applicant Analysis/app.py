@@ -4,6 +4,10 @@ from PIL import Image
 import io
 from datetime import datetime
 import uuid
+import base64
+import docx
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # Import custom modules
 from agents.transcript_analyzer import TranscriptAnalyzer
@@ -56,6 +60,18 @@ if "analyst_model" not in st.session_state:
     st.session_state.analyst_model = "qwen/qwen-max"
 if "consultant_model" not in st.session_state:
     st.session_state.consultant_model = "qwen/qwen-max"
+if "show_recommendations" not in st.session_state:
+    st.session_state.show_recommendations = False
+if "transcript_image" not in st.session_state:
+    st.session_state.transcript_image = None
+if "university" not in st.session_state:
+    st.session_state.university = ""
+if "major" not in st.session_state:
+    st.session_state.major = ""
+if "predicted_degree" not in st.session_state:
+    st.session_state.predicted_degree = ""
+if "custom_requirements" not in st.session_state:
+    st.session_state.custom_requirements = ""
 
 # Check if necessary API keys are set
 def check_api_keys():
@@ -88,22 +104,81 @@ SUPPORTED_MODELS = [
 
 # 使用LangSmith追踪分析师生成报告的函数
 @traceable(run_type="chain", name="CompetitivenessAnalysis")
-def generate_competitiveness_report(analyst, university, major, predicted_degree, transcript_content):
+def generate_competitiveness_report(analyst, university, major, predicted_degree, transcript_content, custom_requirements=""):
     """追踪竞争力分析报告的生成过程"""
     return analyst.generate_report(
         university=university,
         major=major,
         predicted_degree=predicted_degree,
-        transcript_content=transcript_content
+        transcript_content=transcript_content,
+        custom_requirements=custom_requirements
     )
 
 # 使用LangSmith追踪咨询助手推荐项目的函数
 @traceable(run_type="chain", name="ProgramRecommendations")
-def generate_program_recommendations(consultant, competitiveness_report):
+def generate_program_recommendations(consultant, competitiveness_report, custom_requirements=""):
     """追踪项目推荐的生成过程"""
     return consultant.recommend_projects(
-        competitiveness_report=competitiveness_report
+        competitiveness_report=competitiveness_report,
+        custom_requirements=custom_requirements
     )
+
+# 创建Word文档报告并提供下载
+def create_downloadable_report(report_title, report_content):
+    """生成可下载的Word文档报告"""
+    # 创建一个新的Word文档
+    doc = docx.Document()
+    
+    # 设置文档标题
+    title = doc.add_heading(report_title, level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # 添加日期
+    date_paragraph = doc.add_paragraph()
+    date_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    date_run = date_paragraph.add_run(f"Generated on: {datetime.now().strftime('%Y-%m-%d')}")
+    date_run.italic = True
+    
+    # 添加分隔线
+    doc.add_paragraph("_" * 50)
+    
+    # 添加报告内容 (处理Markdown)
+    # 这是一个简单的处理，实际应用中可能需要更复杂的Markdown转换
+    lines = report_content.split('\n')
+    current_paragraph = None
+    
+    for line in lines:
+        # 处理标题
+        if line.startswith('# '):
+            doc.add_heading(line[2:], level=1)
+        elif line.startswith('## '):
+            doc.add_heading(line[3:], level=2)
+        elif line.startswith('### '):
+            doc.add_heading(line[4:], level=3)
+        # 处理列表项
+        elif line.startswith('- ') or line.startswith('* '):
+            if not current_paragraph or not current_paragraph.text.startswith(('- ', '* ')):
+                current_paragraph = doc.add_paragraph()
+            current_paragraph.add_run('\n' + line)
+        # 处理空行
+        elif not line.strip():
+            current_paragraph = None
+        # 处理普通文本
+        else:
+            if not current_paragraph:
+                current_paragraph = doc.add_paragraph()
+            current_paragraph.add_run(line)
+    
+    # 保存文档到内存中
+    docx_stream = io.BytesIO()
+    doc.save(docx_stream)
+    docx_stream.seek(0)
+    
+    # 转换为Base64编码以便于下载
+    base64_docx = base64.b64encode(docx_stream.read()).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{base64_docx}" download="{report_title}.docx">点击下载Word文档</a>'
+    
+    return href
 
 # Main function
 def main():
@@ -113,120 +188,181 @@ def main():
     with tab1:
         st.title("Applicant Competitiveness Analysis Tool")
         
-        # Form for user inputs
-        with st.form("input_form"):
-            # University selection (currently only one option)
-            university = st.selectbox(
-                "Select University",
-                ["Xi'an Jiaotong-Liverpool University"],
-                index=0
-            )
+        # 检查是否有已生成的报告，决定是否显示表单
+        if st.session_state.competitiveness_report is None:
+            # 第一阶段：输入基本信息和上传成绩单
+            col1, col2 = st.columns([2, 1])
             
-            # Major input
-            major = st.text_input("Enter Your Major")
+            with col1:
+                # University selection (currently only one option)
+                university = st.selectbox(
+                    "Select University",
+                    ["Xi'an Jiaotong-Liverpool University"],
+                    index=0
+                )
+                st.session_state.university = university
+                
+                # Major input
+                major = st.text_input("Enter Your Major")
+                st.session_state.major = major
+                
+                # Predicted degree classification
+                predicted_degree = st.selectbox(
+                    "Predicted Degree Classification",
+                    ["First Class", "Upper Second Class", "Lower Second Class", "Third Class"]
+                )
+                st.session_state.predicted_degree = predicted_degree
+                
+                # 添加个性化需求输入框
+                custom_requirements = st.text_area(
+                    "Custom Requirements (Optional)",
+                    placeholder="Enter any specific requirements or questions you have about UCL programs...",
+                    help="You can specify particular interests, career goals, or ask specific questions about UCL programs."
+                )
+                st.session_state.custom_requirements = custom_requirements
             
-            # Predicted degree classification
-            predicted_degree = st.selectbox(
-                "Predicted Degree Classification",
-                ["First Class", "Upper Second Class", "Lower Second Class", "Third Class"]
-            )
-            
-            # Transcript upload (only image formats)
-            transcript_file = st.file_uploader(
-                "Upload Your Transcript (Image format only)",
-                type=["jpg", "jpeg", "png"]
-            )
-            
-            # Submit button
-            submitted = st.form_submit_button("Submit")
+            with col2:
+                # Transcript upload (only image formats)
+                transcript_file = st.file_uploader(
+                    "Upload Your Transcript (Image format only)",
+                    type=["jpg", "jpeg", "png"]
+                )
+                
+                if transcript_file is not None:
+                    # 保存图片到会话状态但不显示
+                    st.session_state.transcript_image = Image.open(transcript_file)
+                
+                # 生成竞争力分析按钮 (仅当必要字段已填写时启用)
+                generate_enabled = transcript_file is not None and major
+                
+                if not generate_enabled:
+                    st.info("Please upload a transcript and enter your major to generate analysis.")
+                
+                if st.button("Generate Analysis", disabled=not generate_enabled, key="generate_analysis", use_container_width=True):
+                    if transcript_file is not None and major:
+                        # 从session state获取模型选择和其他信息
+                        analyst_model = st.session_state.analyst_model
+                        custom_requirements = st.session_state.custom_requirements
+                        university = st.session_state.university
+                        major = st.session_state.major
+                        predicted_degree = st.session_state.predicted_degree
+                        image = st.session_state.transcript_image
+                        
+                        # 生成一个会话ID，用于LangSmith追踪
+                        session_id = str(uuid.uuid4())
+                        
+                        # First step: Process the transcript with TranscriptAnalyzer
+                        with st.spinner("Analyzing transcript with Qwen 2.5 VL via OpenRouter..."):
+                            # Process the transcript with AI
+                            transcript_analyzer = TranscriptAnalyzer()
+                            transcript_content = transcript_analyzer.extract_transcript_data(image)
+                            st.session_state.transcript_content = transcript_content
+                        
+                        # Second step: Generate competitiveness report
+                        with st.spinner(f"Generating competitiveness report with {analyst_model} via OpenRouter..."):
+                            analyst = CompetitivenessAnalyst(model_name=analyst_model)
+                            
+                            # 使用LangSmith追踪函数包装原始调用
+                            if langsmith_enabled:
+                                # 使用装饰器追踪的函数
+                                with st.status("LangSmith: Tracking competitiveness analysis..."):
+                                    st.session_state.competitiveness_report = generate_competitiveness_report(
+                                        analyst,
+                                        university=university,
+                                        major=major,
+                                        predicted_degree=predicted_degree,
+                                        transcript_content=transcript_content,
+                                        custom_requirements=custom_requirements
+                                    )
+                            else:
+                                # 直接调用函数
+                                st.session_state.competitiveness_report = analyst.generate_report(
+                                    university=university,
+                                    major=major,
+                                    predicted_degree=predicted_degree,
+                                    transcript_content=transcript_content,
+                                    custom_requirements=custom_requirements
+                                )
+                        
+                        # 重新加载页面以显示结果
+                        st.rerun()
         
-        # Process the form submission
-        if submitted and transcript_file is not None and major:
-            # 从session state获取模型选择
-            analyst_model = st.session_state.analyst_model
-            consultant_model = st.session_state.consultant_model
-            
-            # 生成一个会话ID，用于LangSmith追踪
-            session_id = str(uuid.uuid4())
-            
-            # First step: Process the transcript with TranscriptAnalyzer
-            with st.spinner("Analyzing transcript with Qwen 2.5 VL via OpenRouter..."):
-                # Save and display the uploaded image
-                image = Image.open(transcript_file)
-                st.image(image, caption="Uploaded Transcript", use_column_width=True)
-                
-                # Process the transcript with AI
-                transcript_analyzer = TranscriptAnalyzer()
-                transcript_content = transcript_analyzer.extract_transcript_data(image)
-                st.session_state.transcript_content = transcript_content
-                
-                # Display the extracted transcript data
-                st.subheader("Extracted Transcript Data")
-                st.text_area("Transcript Content", transcript_content, height=200, disabled=True)
-            
-            # Second step: Generate competitiveness report
-            with st.spinner(f"Generating competitiveness report with {analyst_model} via OpenRouter..."):
-                analyst = CompetitivenessAnalyst(model_name=analyst_model)
-                
-                # 使用LangSmith追踪函数包装原始调用
-                if langsmith_enabled:
-                    # 使用装饰器追踪的函数
-                    with st.status("LangSmith: Tracking competitiveness analysis..."):
-                        st.session_state.competitiveness_report = generate_competitiveness_report(
-                            analyst,
-                            university=university,
-                            major=major,
-                            predicted_degree=predicted_degree,
-                            transcript_content=transcript_content
-                        )
-                else:
-                    # 直接调用函数
-                    st.session_state.competitiveness_report = analyst.generate_report(
-                        university=university,
-                        major=major,
-                        predicted_degree=predicted_degree,
-                        transcript_content=transcript_content
-                    )
-                
-                # Display competitiveness report
-                st.subheader("Competitiveness Analysis Report")
-                st.markdown(st.session_state.competitiveness_report)
-            
-            # Third step: Generate program recommendations
-            with st.spinner(f"Generating program recommendations with {consultant_model} via OpenRouter..."):
-                consultant = ConsultingAssistant(model_name=consultant_model)
-                
-                # 使用LangSmith追踪函数包装原始调用
-                if langsmith_enabled:
-                    # 使用装饰器追踪的函数
-                    with st.status("LangSmith: Tracking program recommendations..."):
-                        st.session_state.project_recommendations = generate_program_recommendations(
-                            consultant,
-                            competitiveness_report=st.session_state.competitiveness_report
-                        )
-                else:
-                    # 直接调用函数
-                    st.session_state.project_recommendations = consultant.recommend_projects(
-                        competitiveness_report=st.session_state.competitiveness_report
-                    )
-                
-                # Display program recommendations
-                st.subheader("UCL Program Recommendations")
-                st.markdown(st.session_state.project_recommendations)
-        
-        # If not submitted but we have stored results, display them
-        elif not submitted:
-            if st.session_state.transcript_content:
-                st.subheader("Extracted Transcript Data")
+        # 第二阶段：显示结果和推荐按钮
+        else:
+            # 显示成绩单数据
+            with st.expander("Transcript Data", expanded=False):
                 st.text_area("Transcript Content", st.session_state.transcript_content, height=200, disabled=True)
             
-            if st.session_state.competitiveness_report:
-                st.subheader("Competitiveness Analysis Report")
+            # 显示竞争力分析报告（带折叠功能）
+            with st.expander("Competitiveness Analysis Report", expanded=True):
                 st.markdown(st.session_state.competitiveness_report)
+                
+                # 添加导出Word文档的按钮
+                report_download = create_downloadable_report(
+                    "Competitiveness Analysis Report",
+                    st.session_state.competitiveness_report
+                )
+                st.markdown(report_download, unsafe_allow_html=True)
             
-            if st.session_state.project_recommendations:
-                st.subheader("UCL Program Recommendations")
-                st.markdown(st.session_state.project_recommendations)
+            # 显示项目推荐和推荐按钮
+            col1, col2 = st.columns([3, 1])
+            
+            with col2:
+                if st.session_state.project_recommendations is None:
+                    # 显示推荐按钮（触发项目推荐生成）
+                    if st.button("Generate Recommendations", key="generate_recommendations", use_container_width=True):
+                        st.session_state.show_recommendations = True
+                        
+                        # 从session state获取模型选择
+                        consultant_model = st.session_state.consultant_model
+                        custom_requirements = st.session_state.custom_requirements
+                        
+                        # 生成项目推荐
+                        with st.spinner(f"Generating program recommendations with {consultant_model} via OpenRouter..."):
+                            consultant = ConsultingAssistant(model_name=consultant_model)
+                            
+                            # 使用LangSmith追踪函数包装原始调用
+                            if langsmith_enabled:
+                                # 使用装饰器追踪的函数
+                                with st.status("LangSmith: Tracking program recommendations..."):
+                                    st.session_state.project_recommendations = generate_program_recommendations(
+                                        consultant,
+                                        competitiveness_report=st.session_state.competitiveness_report,
+                                        custom_requirements=custom_requirements
+                                    )
+                            else:
+                                # 直接调用函数
+                                st.session_state.project_recommendations = consultant.recommend_projects(
+                                    competitiveness_report=st.session_state.competitiveness_report,
+                                    custom_requirements=custom_requirements
+                                )
+                            
+                            # 重新加载页面以显示结果
+                            st.rerun()
+                
+                # 重置按钮（清除所有结果）
+                if st.button("Start Over", key="reset_analysis", use_container_width=True):
+                    # 清空所有会话状态
+                    st.session_state.competitiveness_report = None
+                    st.session_state.project_recommendations = None
+                    st.session_state.transcript_content = None
+                    st.session_state.transcript_image = None
+                    st.session_state.show_recommendations = False
+                    st.session_state.custom_requirements = ""
+                    # 重新加载页面
+                    st.rerun()
+            
+            # 如果已经生成了项目推荐，则显示
+            if st.session_state.project_recommendations is not None:
+                with st.expander("UCL Program Recommendations", expanded=True):
+                    st.markdown(st.session_state.project_recommendations)
+                    
+                    # 添加导出Word文档的按钮
+                    recommendations_download = create_downloadable_report(
+                        "UCL Program Recommendations",
+                        st.session_state.project_recommendations
+                    )
+                    st.markdown(recommendations_download, unsafe_allow_html=True)
     
     with tab2:
         st.title("AI Model & Prompt Configuration")
