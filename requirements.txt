@@ -10,10 +10,10 @@ langgraph
 langchain
 langchain-openai
 langsmith
-langchain-core==0.1.33
-langchain-community==0.0.26
-langchain-anthropic==0.0.11
-langchain-openai==0.0.6
-zhipuai==2.0.3
-beautifulsoup4==4.12.2
+langchain-core
+langchain-community
+langchain-anthropic
+langchain-openai
+zhipuai
+beautifulsoup4
 openai
