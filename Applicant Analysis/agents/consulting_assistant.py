@@ -2,10 +2,9 @@ import os
 import re
 import requests
 from typing import Dict, Any, List, Optional
+import json
+import streamlit as st
 from bs4 import BeautifulSoup
-from langchain.chains import LLMChain
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
 from config.prompts import load_prompts
 from agents.serper_client import SerperClient
 
@@ -15,17 +14,92 @@ class ConsultingAssistant:
     the competitiveness analysis report.
     """
     
-    def __init__(self):
-        """Initialize the Consulting Assistant agent with default settings."""
+    # List of supported models (same as CompetitivenessAnalyst)
+    SUPPORTED_MODELS = [
+        "qwen/qwen-max",
+        "qwen/qwen3-32b:free",
+        "deepseek/deepseek-chat-v3-0324:free",
+        "anthropic/claude-3.7-sonnet",
+        "openai/gpt-4.1"
+    ]
+    
+    def __init__(self, model_name=None):
+        """
+        Initialize the Consulting Assistant agent.
+        
+        Args:
+            model_name: The name of the LLM model to use
+        """
         self.prompts = load_prompts()["consultant"]
-        self.model_name = self.prompts.get("model", "gpt-4-turbo")
+        
+        # Set model name from parameter or default to first in list
+        self.model_name = model_name if model_name in self.SUPPORTED_MODELS else self.SUPPORTED_MODELS[0]
+        
+        # Get API provider and model from model name
+        self.provider, self.model = self._parse_model_name(self.model_name)
+        
+        # Set API key from Streamlit secrets
+        self.api_key = self._get_api_key()
+        
+        # Set API endpoint based on provider
+        self.api_url = self._get_api_endpoint()
         
         # Initialize the Serper client for web search
         self.serper_client = SerperClient()
+    
+    def _parse_model_name(self, model_name: str) -> tuple:
+        """
+        Parse model name to extract provider and model.
         
-        # We'd initialize the LLM here, but we'll mock it for development
-        # In a real implementation, you would use the appropriate client for your chosen model
-        # self.llm = ChatOpenAI(model_name=self.model_name)
+        Args:
+            model_name: The full model name (provider/model)
+            
+        Returns:
+            Tuple of (provider, model)
+        """
+        parts = model_name.split('/')
+        if len(parts) >= 2:
+            provider = parts[0]
+            model = '/'.join(parts[1:])
+            # Remove any tag (e.g., ":free") from model name
+            if ':' in model:
+                model = model.split(':')[0]
+            return provider, model
+        else:
+            return "qwen", "qwen-max"  # Default
+    
+    def _get_api_key(self) -> str:
+        """
+        Get the appropriate API key from Streamlit secrets based on the provider.
+        
+        Returns:
+            API key string
+        """
+        key_mapping = {
+            "qwen": "QWEN_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY"
+        }
+        
+        key_name = key_mapping.get(self.provider, "QWEN_API_KEY")
+        return st.secrets.get(key_name, "")
+    
+    def _get_api_endpoint(self) -> str:
+        """
+        Get the appropriate API endpoint based on the provider.
+        
+        Returns:
+            API endpoint URL string
+        """
+        endpoint_mapping = {
+            "qwen": "https://api.qwen.ai/v1/chat/completions",
+            "anthropic": "https://api.anthropic.com/v1/messages",
+            "openai": "https://api.openai.com/v1/chat/completions",
+            "deepseek": "https://api.deepseek.com/v1/chat/completions"
+        }
+        
+        return endpoint_mapping.get(self.provider, "https://api.qwen.ai/v1/chat/completions")
     
     def search_ucl_programs(self, keywords: List[str]) -> List[Dict[str, str]]:
         """
@@ -45,7 +119,7 @@ class ConsultingAssistant:
             )
             return programs if programs else self.get_mock_programs()
         except Exception as e:
-            print(f"Error using Serper for UCL program search: {e}")
+            st.error(f"Error using Serper for UCL program search: {e}")
             # Fall back to mock data if search fails
             return self.get_mock_programs()
     
@@ -125,30 +199,148 @@ class ConsultingAssistant:
         Returns:
             Formatted program recommendations
         """
-        # Extract keywords from the report
-        keywords = self.extract_keywords_from_report(competitiveness_report)
+        try:
+            # Extract keywords from the report
+            keywords = self.extract_keywords_from_report(competitiveness_report)
+            
+            # Search for matching programs using Serper web search
+            programs = self.search_ucl_programs(keywords)
+            
+            # Generate recommendations using LLM
+            prompt = f"""
+            {self.prompts['role']}
+            
+            {self.prompts['task']}
+            
+            Competitiveness Report:
+            {competitiveness_report}
+            
+            Available UCL Programs:
+            {json.dumps(programs, indent=2)}
+            
+            {self.prompts['output']}
+            """
+            
+            # Call the appropriate API method based on provider
+            if self.provider == "qwen":
+                return self._call_qwen_api(prompt, programs)
+            elif self.provider == "anthropic":
+                return self._call_anthropic_api(prompt, programs)
+            elif self.provider == "openai":
+                return self._call_openai_api(prompt, programs)
+            elif self.provider == "deepseek":
+                return self._call_deepseek_api(prompt, programs)
+            else:
+                # Default to formatting programs directly if provider not recognized
+                return self._format_program_recommendations(programs)
+                
+        except Exception as e:
+            st.error(f"Error generating program recommendations: {str(e)}")
+            return self._format_program_recommendations(self.get_mock_programs())
+    
+    def _call_qwen_api(self, prompt: str, fallback_programs: List[Dict[str, str]]) -> str:
+        """Call Qwen API to generate recommendations."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
         
-        # Search for matching programs using Serper web search
-        programs = self.search_ucl_programs(keywords)
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1500
+        }
         
-        # Generate recommendations using LLM
-        prompt_template = f"""
-        {self.prompts['role']}
+        with st.spinner(f"Generating program recommendations with {self.model_name}..."):
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
+                return self._format_program_recommendations(fallback_programs)
+    
+    def _call_anthropic_api(self, prompt: str, fallback_programs: List[Dict[str, str]]) -> str:
+        """Call Anthropic API to generate recommendations."""
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01"
+        }
         
-        {self.prompts['task']}
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1500
+        }
         
-        Competitiveness Report:
-        {competitiveness_report}
+        with st.spinner(f"Generating program recommendations with {self.model_name}..."):
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result["content"][0]["text"]
+            else:
+                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
+                return self._format_program_recommendations(fallback_programs)
+    
+    def _call_openai_api(self, prompt: str, fallback_programs: List[Dict[str, str]]) -> str:
+        """Call OpenAI API to generate recommendations."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
         
-        Available UCL Programs:
-        {programs}
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1500
+        }
         
-        {self.prompts['output']}
+        with st.spinner(f"Generating program recommendations with {self.model_name}..."):
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
+                return self._format_program_recommendations(fallback_programs)
+    
+    def _call_deepseek_api(self, prompt: str, fallback_programs: List[Dict[str, str]]) -> str:
+        """Call DeepSeek API to generate recommendations."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1500
+        }
+        
+        with st.spinner(f"Generating program recommendations with {self.model_name}..."):
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
+                return self._format_program_recommendations(fallback_programs)
+    
+    def _format_program_recommendations(self, programs: List[Dict[str, str]]) -> str:
         """
+        Format program recommendations as Markdown (fallback method).
         
-        # In a real implementation, you would call the LLM API here
-        # For now, we'll format the mock programs
-        
+        Args:
+            programs: List of program information dictionaries
+            
+        Returns:
+            Formatted program recommendations as Markdown
+        """
         recommendation_items = []
         for program in programs:
             recommendation_items.append(
