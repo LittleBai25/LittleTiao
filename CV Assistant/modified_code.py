@@ -279,8 +279,8 @@ def run_agent(agent_name, model, prompt, parent_run_id=None):
     
     return result.content
 
-# Tab布局
-TAB1, TAB2 = st.tabs(["文件上传与分析", "提示词与模型设置"])
+# Tab布局 - 修改为三个标签页
+TAB1, TAB2, TAB3 = st.tabs(["文件上传与分析", "提示词与模型设置", "系统状态"])
 
 with TAB1:
     st.header("上传你的简历素材和支持文件")
@@ -421,8 +421,8 @@ with TAB2:
     3. 如果没有上传支持文件，系统将直接使用简历助手agent处理简历素材表
     """)
 
-# 添加LangSmith状态指示器
-with st.sidebar:
+# 添加系统状态到第三个标签页
+with TAB3:
     st.title("系统状态")
     
     # 显示API连接状态
