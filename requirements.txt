@@ -21,3 +21,5 @@ mcp-client
 websockets
 python-dotenv
 mcp
+python-dotenv
+aiohttp
