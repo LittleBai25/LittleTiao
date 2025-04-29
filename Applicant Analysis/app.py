@@ -212,9 +212,9 @@ def main():
             )
             st.session_state.predicted_degree = predicted_degree
             
-            # Transcript upload (移至预测学位等级下方)
+            # Transcript upload (可选)
             transcript_file = st.file_uploader(
-                "Upload Your Transcript (Image format only)",
+                "Upload Your Transcript (Optional, Image format only)",
                 type=["jpg", "jpeg", "png"]
             )
             
@@ -230,31 +230,37 @@ def main():
             )
             st.session_state.custom_requirements = custom_requirements
             
-            # 生成竞争力分析按钮 (仅当必要字段已填写时启用)
-            generate_enabled = transcript_file is not None and major
+            # 生成竞争力分析按钮 (仅当必要字段已填写时启用 - 现在只需要专业信息)
+            generate_enabled = major and university
             
             # 添加一个信息提示
             if not generate_enabled:
-                st.info("Please upload a transcript and enter your major to generate analysis.")
+                st.info("Please enter your university and major to generate analysis.")
             
             # 创建右对齐的按钮
             col1, col2, col3 = st.columns([2, 1, 1])
             with col3:
                 if st.button("Generate Analysis", disabled=not generate_enabled, key="generate_analysis", use_container_width=True):
-                    if transcript_file is not None and major:
+                    if major and university:
                         # 从session state获取模型选择和其他信息
                         analyst_model = st.session_state.analyst_model
                         custom_requirements = st.session_state.custom_requirements
                         university = st.session_state.university
                         major = st.session_state.major
                         predicted_degree = st.session_state.predicted_degree
-                        image = st.session_state.transcript_image
                         
                         # 生成一个会话ID，用于LangSmith追踪
                         session_id = str(uuid.uuid4())
                         
-                        # 设置进度状态
-                        st.session_state.analysis_status = "transcript"
+                        # 设置进度状态 - 检查是否需要处理成绩单
+                        if st.session_state.transcript_image is not None:
+                            st.session_state.analysis_status = "transcript"
+                        else:
+                            # 如果没有成绩单，直接进入竞争力分析
+                            st.session_state.analysis_status = "competitiveness"
+                            # 设置空的成绩单内容
+                            st.session_state.transcript_content = "No transcript provided."
+                        
                         st.rerun()
             
             # 显示分析进度（靠左显示）
@@ -303,9 +309,10 @@ def main():
         
         # 第二阶段：显示结果和推荐按钮
         else:
-            # 显示成绩单数据
-            with st.expander("Transcript Data", expanded=False):
-                st.text_area("Transcript Content", st.session_state.transcript_content, height=200, disabled=True)
+            # 只有在成绩单存在时才显示成绩单数据
+            if st.session_state.transcript_content != "No transcript provided.":
+                with st.expander("Transcript Data", expanded=False):
+                    st.text_area("Transcript Content", st.session_state.transcript_content, height=200, disabled=True)
             
             # 显示竞争力分析报告（带折叠功能）
             with st.expander("Competitiveness Analysis Report", expanded=True):
