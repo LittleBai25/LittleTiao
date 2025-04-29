@@ -3,10 +3,15 @@ import os
 from PIL import Image
 import io
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import custom modules
 from agents.competitiveness_analyst import CompetitivenessAnalyst
 from agents.consulting_assistant import ConsultingAssistant
+from agents.serper_client import SerperClient
 from config.prompts import load_prompts, save_prompts
 
 # Set page configuration
@@ -23,11 +28,33 @@ if "project_recommendations" not in st.session_state:
     st.session_state.project_recommendations = None
 if "transcript_content" not in st.session_state:
     st.session_state.transcript_content = None
+if "serper_initialized" not in st.session_state:
+    st.session_state.serper_initialized = False
+
+# Check if necessary API keys are set
+def check_api_keys():
+    """Check if the necessary API keys are set in environment variables."""
+    api_keys = {
+        "SERPER_API_KEY": os.getenv("SERPER_API_KEY"),
+        "SMITHERY_API_KEY": os.getenv("SMITHERY_API_KEY"),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+        "QWEN_API_KEY": os.getenv("QWEN_API_KEY")
+    }
+    
+    return {k: bool(v) for k, v in api_keys.items()}
+
+# Asynchronously initialize the Serper client
+async def init_serper():
+    """Initialize the Serper client asynchronously."""
+    serper_client = SerperClient()
+    result = await serper_client.initialize()
+    st.session_state.serper_initialized = result
+    return result
 
 # Main function
 def main():
     # Create tabs
-    tab1, tab2 = st.tabs(["Competitiveness Analysis", "Prompt Debugging"])
+    tab1, tab2, tab3 = st.tabs(["Competitiveness Analysis", "Prompt Debugging", "System Status"])
     
     with tab1:
         st.title("Applicant Competitiveness Analysis Tool")
@@ -149,6 +176,50 @@ def main():
             # Save updated prompts
             save_prompts(prompts)
             st.success("Prompts saved successfully!")
+
+    with tab3:
+        st.title("System Status")
+        
+        # Check API keys
+        api_key_status = check_api_keys()
+        
+        st.subheader("API Keys")
+        
+        # Display API key status as a table
+        status_data = [
+            {"API Key": key, "Status": "✅ Set" if status else "❌ Not Set"} 
+            for key, status in api_key_status.items()
+        ]
+        
+        st.table(status_data)
+        
+        # Serper MCP server status
+        st.subheader("Serper MCP Server")
+        
+        # Initialize the Serper client if not already initialized
+        if not st.session_state.serper_initialized:
+            if st.button("Initialize Serper Client"):
+                with st.spinner("Initializing Serper client..."):
+                    import asyncio
+                    asyncio.run(init_serper())
+        
+        # Display Serper client status
+        if st.session_state.serper_initialized:
+            st.success("✅ Serper client initialized successfully")
+        else:
+            st.warning("⚠️ Serper client not initialized. Click the button above to initialize.")
+        
+        # Add some help text
+        st.markdown("""
+        ### Troubleshooting
+        
+        If you're experiencing issues:
+        
+        1. Make sure all required API keys are set in the `.env` file
+        2. Run the `create_env.py` script to create a template `.env` file
+        3. Check the console for any error messages
+        4. Ensure you have an active internet connection for web search functionality
+        """)
 
 if __name__ == "__main__":
     main() 
