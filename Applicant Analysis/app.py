@@ -3,6 +3,7 @@ import os
 from PIL import Image
 import io
 from datetime import datetime
+import uuid
 
 # Import custom modules
 from agents.transcript_analyzer import TranscriptAnalyzer
@@ -11,12 +12,36 @@ from agents.consulting_assistant import ConsultingAssistant
 from agents.serper_client import SerperClient
 from config.prompts import load_prompts, save_prompts
 
+# 导入LangSmith追踪功能
+from langsmith import Client
+from langsmith.run_helpers import traceable
+
 # Set page configuration
 st.set_page_config(
     page_title="Applicant Analysis Tool",
     page_icon="🎓",
     layout="wide"
 )
+
+# Initialize LangSmith client
+def init_langsmith():
+    """Initialize LangSmith client from secrets."""
+    try:
+        langsmith_api_key = st.secrets.get("LANGSMITH_API_KEY", "")
+        langsmith_project = st.secrets.get("LANGSMITH_PROJECT", "applicant-analysis-tool")
+        
+        if langsmith_api_key:
+            os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
+            os.environ["LANGCHAIN_PROJECT"] = langsmith_project
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Error initializing LangSmith: {str(e)}")
+        return False
+
+# 初始化LangSmith
+langsmith_enabled = init_langsmith()
 
 # Initialize session state
 if "competitiveness_report" not in st.session_state:
@@ -38,7 +63,8 @@ def check_api_keys():
     api_keys = {
         "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", None),
         "SERPER_API_KEY": st.secrets.get("SERPER_API_KEY", None),
-        "SMITHERY_API_KEY": st.secrets.get("SMITHERY_API_KEY", None)
+        "SMITHERY_API_KEY": st.secrets.get("SMITHERY_API_KEY", None),
+        "LANGSMITH_API_KEY": st.secrets.get("LANGSMITH_API_KEY", None)
     }
     
     return {k: bool(v) for k, v in api_keys.items()}
@@ -59,6 +85,25 @@ SUPPORTED_MODELS = [
     "anthropic/claude-3.7-sonnet",
     "openai/gpt-4.1"
 ]
+
+# 使用LangSmith追踪分析师生成报告的函数
+@traceable(run_type="chain", name="CompetitivenessAnalysis")
+def generate_competitiveness_report(analyst, university, major, predicted_degree, transcript_content):
+    """追踪竞争力分析报告的生成过程"""
+    return analyst.generate_report(
+        university=university,
+        major=major,
+        predicted_degree=predicted_degree,
+        transcript_content=transcript_content
+    )
+
+# 使用LangSmith追踪咨询助手推荐项目的函数
+@traceable(run_type="chain", name="ProgramRecommendations")
+def generate_program_recommendations(consultant, competitiveness_report):
+    """追踪项目推荐的生成过程"""
+    return consultant.recommend_projects(
+        competitiveness_report=competitiveness_report
+    )
 
 # Main function
 def main():
@@ -101,6 +146,9 @@ def main():
             analyst_model = st.session_state.analyst_model
             consultant_model = st.session_state.consultant_model
             
+            # 生成一个会话ID，用于LangSmith追踪
+            session_id = str(uuid.uuid4())
+            
             # First step: Process the transcript with TranscriptAnalyzer
             with st.spinner("Analyzing transcript with Qwen 2.5 VL via OpenRouter..."):
                 # Save and display the uploaded image
@@ -119,12 +167,26 @@ def main():
             # Second step: Generate competitiveness report
             with st.spinner(f"Generating competitiveness report with {analyst_model} via OpenRouter..."):
                 analyst = CompetitivenessAnalyst(model_name=analyst_model)
-                st.session_state.competitiveness_report = analyst.generate_report(
-                    university=university,
-                    major=major,
-                    predicted_degree=predicted_degree,
-                    transcript_content=transcript_content
-                )
+                
+                # 使用LangSmith追踪函数包装原始调用
+                if langsmith_enabled:
+                    # 使用装饰器追踪的函数
+                    with st.status("LangSmith: Tracking competitiveness analysis..."):
+                        st.session_state.competitiveness_report = generate_competitiveness_report(
+                            analyst,
+                            university=university,
+                            major=major,
+                            predicted_degree=predicted_degree,
+                            transcript_content=transcript_content
+                        )
+                else:
+                    # 直接调用函数
+                    st.session_state.competitiveness_report = analyst.generate_report(
+                        university=university,
+                        major=major,
+                        predicted_degree=predicted_degree,
+                        transcript_content=transcript_content
+                    )
                 
                 # Display competitiveness report
                 st.subheader("Competitiveness Analysis Report")
@@ -133,9 +195,20 @@ def main():
             # Third step: Generate program recommendations
             with st.spinner(f"Generating program recommendations with {consultant_model} via OpenRouter..."):
                 consultant = ConsultingAssistant(model_name=consultant_model)
-                st.session_state.project_recommendations = consultant.recommend_projects(
-                    competitiveness_report=st.session_state.competitiveness_report
-                )
+                
+                # 使用LangSmith追踪函数包装原始调用
+                if langsmith_enabled:
+                    # 使用装饰器追踪的函数
+                    with st.status("LangSmith: Tracking program recommendations..."):
+                        st.session_state.project_recommendations = generate_program_recommendations(
+                            consultant,
+                            competitiveness_report=st.session_state.competitiveness_report
+                        )
+                else:
+                    # 直接调用函数
+                    st.session_state.project_recommendations = consultant.recommend_projects(
+                        competitiveness_report=st.session_state.competitiveness_report
+                    )
                 
                 # Display program recommendations
                 st.subheader("UCL Program Recommendations")
@@ -240,6 +313,34 @@ def main():
         
         st.table(status_data)
         
+        # LangSmith 状态
+        st.subheader("LangSmith Monitoring")
+        if langsmith_enabled:
+            st.success("✅ LangSmith 监控已启用，两个主要AI代理的输入和输出将被追踪")
+            st.info(f"Project: {os.environ.get('LANGCHAIN_PROJECT', 'N/A')}")
+            
+            # LangSmith 说明
+            st.markdown("""
+            **LangSmith监控功能：**
+            - 追踪竞争力分析和项目推荐的完整请求和响应
+            - 记录每个代理的输入参数和输出结果
+            - 支持在LangSmith界面上分析和优化提示词
+            - 监控模型性能和延迟
+            """)
+        else:
+            st.warning("⚠️ LangSmith 监控未启用。请在secrets中设置 LANGSMITH_API_KEY 以启用此功能")
+            
+            # 设置说明
+            st.markdown("""
+            **设置LangSmith：**
+            1. 获取LangSmith API密钥: https://smith.langchain.com/
+            2. 在`.streamlit/secrets.toml`中添加:
+                ```
+                LANGSMITH_API_KEY = "your_api_key_here"
+                LANGSMITH_PROJECT = "applicant-analysis-tool"  # 可选项
+                ```
+            """)
+        
         # Serper MCP server status
         st.subheader("Serper MCP Server")
         
@@ -270,6 +371,10 @@ def main():
            # Serper Web搜索 API (用于项目推荐)
            SERPER_API_KEY = "your_serper_api_key"
            SMITHERY_API_KEY = "your_smithery_api_key"
+           
+           # LangSmith监控 API (用于追踪AI代理)
+           LANGSMITH_API_KEY = "your_langsmith_api_key"
+           LANGSMITH_PROJECT = "applicant-analysis-tool"  # 可选项
            ```
         
         2. 对于 Streamlit Cloud 部署，在 Streamlit Cloud 控制面板中添加这些密钥
