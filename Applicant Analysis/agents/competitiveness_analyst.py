@@ -73,7 +73,7 @@ class CompetitivenessAnalyst:
         
         return mock_transcript
     
-    def generate_report(self, university: str, major: str, predicted_degree: str, transcript_content: str) -> str:
+    def generate_report(self, university: str, major: str, predicted_degree: str, transcript_content: str, custom_requirements: str = "") -> str:
         """
         Generate a competitiveness analysis report based on the provided information.
         
@@ -82,11 +82,22 @@ class CompetitivenessAnalyst:
             major: The student's major
             predicted_degree: The student's predicted degree classification
             transcript_content: The extracted transcript data
+            custom_requirements: Optional custom requirements or questions from the user
             
         Returns:
             A formatted competitiveness analysis report
         """
         try:
+            # 准备自定义需求部分（如果有）
+            custom_req_text = ""
+            if custom_requirements and custom_requirements.strip():
+                custom_req_text = f"""
+                Additional Requirements/Questions:
+                {custom_requirements}
+                
+                Please address these specific requirements/questions in your analysis.
+                """
+            
             # Prepare prompt with provided information
             prompt = f"""
             {self.prompts['role']}
@@ -99,6 +110,7 @@ class CompetitivenessAnalyst:
             Predicted Degree Classification: {predicted_degree}
             Transcript Data:
             {transcript_content}
+            {custom_req_text}
             
             {self.prompts['output']}
             """
