@@ -14,15 +14,6 @@ class ConsultingAssistant:
     the competitiveness analysis report.
     """
     
-    # List of supported models (via OpenRouter)
-    SUPPORTED_MODELS = [
-        "anthropic/claude-3-5-sonnet",
-        "anthropic/claude-3-haiku",
-        "google/gemini-1.5-pro",
-        "mistralai/mistral-large",
-        "meta-llama/llama-3-70b-instruct"
-    ]
-    
     def __init__(self, model_name=None):
         """
         Initialize the Consulting Assistant agent.
@@ -32,8 +23,8 @@ class ConsultingAssistant:
         """
         self.prompts = load_prompts()["consultant"]
         
-        # Set model name from parameter or default to first in list
-        self.model_name = model_name if model_name in self.SUPPORTED_MODELS else self.SUPPORTED_MODELS[0]
+        # 设置模型名称，如果未提供则使用默认值
+        self.model_name = model_name if model_name else "anthropic/claude-3-5-sonnet"
         
         # Get API key from Streamlit secrets (OpenRouter unified API key)
         self.api_key = st.secrets.get("OPENROUTER_API_KEY", "")
