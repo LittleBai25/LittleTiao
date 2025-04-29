@@ -14,16 +14,16 @@ from config.prompts import load_prompts
 class CompetitivenessAnalyst:
     """
     Agent responsible for analyzing student competitiveness and generating competitiveness reports.
-    Can use multiple LLM models based on user selection.
+    Can use multiple LLM models based on user selection via OpenRouter API.
     """
     
-    # List of supported models
+    # List of supported models (via OpenRouter)
     SUPPORTED_MODELS = [
-        "qwen/qwen-max",
-        "qwen/qwen3-32b:free",
-        "deepseek/deepseek-chat-v3-0324:free",
-        "anthropic/claude-3.7-sonnet",
-        "openai/gpt-4.1"
+        "anthropic/claude-3-5-sonnet",
+        "anthropic/claude-3-haiku",
+        "google/gemini-1.5-pro",
+        "mistralai/mistral-large",
+        "meta-llama/llama-3-70b-instruct"
     ]
     
     def __init__(self, model_name=None):
@@ -31,75 +31,18 @@ class CompetitivenessAnalyst:
         Initialize the Competitiveness Analyst agent.
         
         Args:
-            model_name: The name of the LLM model to use
+            model_name: The name of the LLM model to use via OpenRouter
         """
         self.prompts = load_prompts()["analyst"]
         
         # Set model name from parameter or default to first in list
         self.model_name = model_name if model_name in self.SUPPORTED_MODELS else self.SUPPORTED_MODELS[0]
         
-        # Get API provider and model from model name
-        self.provider, self.model = self._parse_model_name(self.model_name)
+        # Get API key from Streamlit secrets (OpenRouter unified API key)
+        self.api_key = st.secrets.get("OPENROUTER_API_KEY", "")
         
-        # Set API key from Streamlit secrets
-        self.api_key = self._get_api_key()
-        
-        # Set API endpoint based on provider
-        self.api_url = self._get_api_endpoint()
-    
-    def _parse_model_name(self, model_name: str) -> tuple:
-        """
-        Parse model name to extract provider and model.
-        
-        Args:
-            model_name: The full model name (provider/model)
-            
-        Returns:
-            Tuple of (provider, model)
-        """
-        parts = model_name.split('/')
-        if len(parts) >= 2:
-            provider = parts[0]
-            model = '/'.join(parts[1:])
-            # Remove any tag (e.g., ":free") from model name
-            if ':' in model:
-                model = model.split(':')[0]
-            return provider, model
-        else:
-            return "qwen", "qwen-max"  # Default
-    
-    def _get_api_key(self) -> str:
-        """
-        Get the appropriate API key from Streamlit secrets based on the provider.
-        
-        Returns:
-            API key string
-        """
-        key_mapping = {
-            "qwen": "QWEN_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "deepseek": "DEEPSEEK_API_KEY"
-        }
-        
-        key_name = key_mapping.get(self.provider, "QWEN_API_KEY")
-        return st.secrets.get(key_name, "")
-    
-    def _get_api_endpoint(self) -> str:
-        """
-        Get the appropriate API endpoint based on the provider.
-        
-        Returns:
-            API endpoint URL string
-        """
-        endpoint_mapping = {
-            "qwen": "https://api.qwen.ai/v1/chat/completions",
-            "anthropic": "https://api.anthropic.com/v1/messages",
-            "openai": "https://api.openai.com/v1/chat/completions",
-            "deepseek": "https://api.deepseek.com/v1/chat/completions"
-        }
-        
-        return endpoint_mapping.get(self.provider, "https://api.qwen.ai/v1/chat/completions")
+        # Set API endpoint for OpenRouter
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
     
     def extract_transcript_data(self, image: Image.Image) -> str:
         """
@@ -169,32 +112,24 @@ class CompetitivenessAnalyst:
             {self.prompts['output']}
             """
             
-            # Call the appropriate API method based on provider
-            if self.provider == "qwen":
-                return self._call_qwen_api(prompt)
-            elif self.provider == "anthropic":
-                return self._call_anthropic_api(prompt)
-            elif self.provider == "openai":
-                return self._call_openai_api(prompt)
-            elif self.provider == "deepseek":
-                return self._call_deepseek_api(prompt)
-            else:
-                # Default to mock response if provider not recognized
-                return self._get_mock_report(university, major, predicted_degree)
+            # Call OpenRouter API with selected model
+            return self._call_openrouter_api(prompt, university, major, predicted_degree)
                 
         except Exception as e:
             st.error(f"Error generating competitiveness report: {str(e)}")
             return self._get_mock_report(university, major, predicted_degree)
     
-    def _call_qwen_api(self, prompt: str) -> str:
-        """Call Qwen API to generate report."""
+    def _call_openrouter_api(self, prompt: str, university: str, major: str, predicted_degree: str) -> str:
+        """Call OpenRouter API to generate report with selected model."""
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://applicant-analysis.streamlit.app",  # Optional: Replace with your actual app URL
+            "X-Title": "Applicant Analysis Tool"  # Optional: Your application name
         }
         
         payload = {
-            "model": self.model,
+            "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1500
         }
@@ -206,78 +141,8 @@ class CompetitivenessAnalyst:
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
             else:
-                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
-                return self._get_mock_report("", "", "")
-    
-    def _call_anthropic_api(self, prompt: str) -> str:
-        """Call Anthropic API to generate report."""
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01"
-        }
-        
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1500
-        }
-        
-        with st.spinner(f"Generating competitiveness report with {self.model_name}..."):
-            response = requests.post(self.api_url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result["content"][0]["text"]
-            else:
-                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
-                return self._get_mock_report("", "", "")
-    
-    def _call_openai_api(self, prompt: str) -> str:
-        """Call OpenAI API to generate report."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1500
-        }
-        
-        with st.spinner(f"Generating competitiveness report with {self.model_name}..."):
-            response = requests.post(self.api_url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
-                return self._get_mock_report("", "", "")
-    
-    def _call_deepseek_api(self, prompt: str) -> str:
-        """Call DeepSeek API to generate report."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1500
-        }
-        
-        with st.spinner(f"Generating competitiveness report with {self.model_name}..."):
-            response = requests.post(self.api_url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                st.error(f"API Error ({self.model_name}): {response.status_code} - {response.text}")
-                return self._get_mock_report("", "", "")
+                st.error(f"OpenRouter API Error ({self.model_name}): {response.status_code} - {response.text}")
+                return self._get_mock_report(university, major, predicted_degree)
     
     def _get_mock_report(self, university: str, major: str, predicted_degree: str) -> str:
         """
