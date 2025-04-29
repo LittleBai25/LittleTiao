@@ -73,7 +73,7 @@ class TranscriptAnalyzer:
                         ]
                     }
                 ],
-                "max_tokens": 800
+                "max_tokens": 2000
             }
             
             # Set up headers with OpenRouter API key
