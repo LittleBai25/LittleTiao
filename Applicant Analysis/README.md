@@ -10,6 +10,7 @@
 - **网络搜索集成**：使用Serper MCP服务器搜索有关UCL项目的最新信息
 - **提示词调试**：微调AI代理使用的提示词以自定义分析
 - **多LLM支持**：通过OpenRouter选择各种模型进行分析和推荐
+- **LangSmith监控**：监控和分析AI代理的输入输出，优化性能和质量
 
 ## 支持的模型
 
@@ -28,6 +29,7 @@
 - Python 3.8+
 - Streamlit
 - LangChain
+- LangSmith（监控和分析）
 - MCP Client（用于Serper集成）
 - 各种服务的API密钥（参见安装部分）
 
@@ -46,6 +48,10 @@
    # Serper Web搜索 API (用于项目推荐)
    SERPER_API_KEY = "your_serper_api_key"
    SMITHERY_API_KEY = "your_smithery_api_key"
+   
+   # LangSmith监控 API (用于追踪AI代理)
+   LANGSMITH_API_KEY = "your_langsmith_api_key"
+   LANGSMITH_PROJECT = "applicant-analysis-tool"  # 可选项
    ```
 
 ## 使用方法
@@ -64,10 +70,15 @@
 4. 在"AI模型和提示词配置"选项卡中：
    - 为竞争力分析和项目推荐选择AI模型
    - 根据需要修改提示词以自定义AI响应
-5. 系统将自动：
+5. 在"系统状态"选项卡中：
+   - 检查API密钥的状态
+   - 查看LangSmith监控的状态和配置
+   - 管理Serper客户端连接
+6. 系统将自动：
    - 使用Qwen 2.5 VL提取并显示成绩单数据
    - 使用您选择的模型生成竞争力分析报告
    - 基于分析提供UCL项目推荐
+   - 通过LangSmith记录和监控关键AI交互
 
 ## 工作流程
 
@@ -76,6 +87,16 @@
 1. **成绩单分析**：Qwen 2.5 VL从上传的成绩单图片中提取结构化数据
 2. **竞争力分析**：选定的LLM分析学生的档案并生成竞争力报告
 3. **项目推荐**：第二个LLM搜索并推荐合适的UCL项目
+4. **性能监控**：LangSmith记录整个过程中的关键指标和内容
+
+## LangSmith监控功能
+
+应用程序使用LangSmith追踪AI代理的输入和输出：
+
+1. **竞争力分析追踪**：记录分析请求的输入参数（大学、专业、成绩单数据）和输出结果
+2. **项目推荐追踪**：记录推荐请求的输入参数（竞争力报告）和输出的项目推荐
+3. **监控面板**：通过LangSmith网站访问详细的监控面板和数据
+4. **性能优化**：使用数据来优化提示词和模型选择
 
 ## Serper MCP服务器集成
 
