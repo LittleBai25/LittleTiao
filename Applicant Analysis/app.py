@@ -28,9 +28,9 @@ if "transcript_content" not in st.session_state:
 if "serper_initialized" not in st.session_state:
     st.session_state.serper_initialized = False
 if "analyst_model" not in st.session_state:
-    st.session_state.analyst_model = "anthropic/claude-3-5-sonnet"
+    st.session_state.analyst_model = "qwen/qwen-max"
 if "consultant_model" not in st.session_state:
-    st.session_state.consultant_model = "anthropic/claude-3-5-sonnet"
+    st.session_state.consultant_model = "qwen/qwen-max"
 
 # Check if necessary API keys are set
 def check_api_keys():
@@ -53,11 +53,11 @@ async def init_serper():
 
 # 支持的模型列表
 SUPPORTED_MODELS = [
-    "anthropic/claude-3-5-sonnet",
-    "anthropic/claude-3-haiku",
-    "google/gemini-1.5-pro",
-    "mistralai/mistral-large",
-    "meta-llama/llama-3-70b-instruct"
+    "qwen/qwen-max",
+    "qwen/qwen3-32b:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "anthropic/claude-3.7-sonnet",
+    "openai/gpt-4.1"
 ]
 
 # Main function
