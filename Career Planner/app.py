@@ -21,16 +21,16 @@ load_dotenv()
 
 # Page configuration
 st.set_page_config(
-    page_title="职业规划助理",
+    page_title="Career Planning Assistant",
     page_icon="🚀",
     layout="wide"
 )
 
-# Available models
+# Available models with full names
 AVAILABLE_MODELS = {
+    "qwen/qwen-max": "Qwen Max",
     "qwen/qwen3-32b:free": "Qwen 3 32B",
-    "deepseek/deepseek-chat-v3-0324:free": "DeepSeek Chat v3",
-    "qwen/qwen-max": "Qwen Max"
+    "deepseek/deepseek-chat-v3-0324:free": "DeepSeek Chat v3"
 }
 
 # Session state initialization
@@ -45,18 +45,18 @@ if 'user_inputs' not in st.session_state:
 
 if 'career_agent_settings' not in st.session_state:
     st.session_state.career_agent_settings = {
-        "role": "您是一位经验丰富的职业规划顾问，拥有丰富的行业知识和洞察力。",
-        "task": "基于用户提供的学术背景、专业、意向行业和职位，分析其职业发展路径，提供具体可行的建议。",
-        "output_format": "请提供一份结构化的职业规划分析，包括：\n1. 背景分析\n2. 职业路径建议\n3. 技能提升方向\n4. 行业前景\n5. 短期和长期目标",
-        "model": "qwen/qwen3-32b:free"
+        "role": "You are an experienced career planning consultant with rich industry knowledge and insights.",
+        "task": "Based on the user's academic background, major, desired industry and position, analyze their career development path and provide specific, feasible suggestions.",
+        "output_format": "Please provide a structured career planning analysis including:\n1. Background Analysis\n2. Career Path Suggestions\n3. Skills Development Direction\n4. Industry Outlook\n5. Short-term and Long-term Goals",
+        "model": "qwen/qwen-max"
     }
 
 if 'submission_agent_settings' not in st.session_state:
     st.session_state.submission_agent_settings = {
-        "role": "您是一位专业的职业规划报告编辑，擅长整合信息并制作美观的报告。",
-        "task": "基于职业规划草稿，补充相关行业数据和信息，制作一份包含文字说明和可视化图表的完整报告。",
-        "output_format": "请提供一份专业的职业规划报告，包括：\n1. 执行摘要\n2. 详细分析\n3. 数据支持的图表\n4. 行动计划\n5. 资源推荐",
-        "model": "deepseek/deepseek-chat-v3-0324:free"
+        "role": "You are a professional career planning report editor, skilled at integrating information and creating visually appealing reports.",
+        "task": "Based on the career planning draft, supplement with relevant industry data and information to create a complete report with text descriptions and visualizations.",
+        "output_format": "Please provide a professional career planning report including:\n1. Executive Summary\n2. Detailed Analysis\n3. Data-Supported Charts\n4. Action Plan\n5. Resource Recommendations",
+        "model": "qwen/qwen-max"
     }
 
 if 'draft_report' not in st.session_state:
@@ -68,7 +68,6 @@ if 'final_report' not in st.session_state:
 if 'api_status' not in st.session_state:
     st.session_state.api_status = {
         "openrouter": False,
-        "qwen": False,
         "langsmith": False
     }
 
@@ -78,64 +77,64 @@ class KnowledgeDatabase:
         # This would be replaced with an actual database connection in production
         self.data = {
             "industries": {
-                "IT/互联网": {
+                "IT/Internet": {
                     "positions": [
                         {
-                            "name": "软件工程师",
-                            "skills": "Python, Java, JavaScript, 数据结构, 算法",
-                            "education": "计算机科学/软件工程相关本科及以上",
-                            "salary": "15K-30K",
-                            "prospects": "行业需求持续增长，发展空间广阔"
+                            "name": "Software Engineer",
+                            "skills": "Python, Java, JavaScript, Data Structures, Algorithms",
+                            "education": "Bachelor's degree or above in Computer Science/Software Engineering",
+                            "salary": "$80K-$150K",
+                            "prospects": "Continuous industry demand, broad development space"
                         },
                         {
-                            "name": "前端开发",
+                            "name": "Frontend Developer",
                             "skills": "HTML, CSS, JavaScript, React/Vue/Angular, TypeScript",
-                            "education": "计算机相关专业本科及以上",
-                            "salary": "12K-25K",
-                            "prospects": "随着互联网产品不断发展，前端开发人才需求旺盛"
+                            "education": "Bachelor's degree or above in Computer Science related majors",
+                            "salary": "$70K-$130K",
+                            "prospects": "High demand with continuous internet product development"
                         },
                         {
-                            "name": "数据分析师",
-                            "skills": "SQL, Python, R, Excel, 数据可视化, 统计学基础",
-                            "education": "统计学/数学/计算机相关专业本科及以上",
-                            "salary": "15K-30K",
-                            "prospects": "大数据时代，数据分析人才稀缺，发展前景良好"
+                            "name": "Data Analyst",
+                            "skills": "SQL, Python, R, Excel, Data Visualization, Statistics",
+                            "education": "Bachelor's degree or above in Statistics/Mathematics/Computer Science",
+                            "salary": "$75K-$140K",
+                            "prospects": "Scarce talent in the big data era, good development prospects"
                         }
                     ],
-                    "overview": "IT/互联网行业技术更新快，竞争激烈，但薪资水平和发展空间较大"
+                    "overview": "The IT/Internet industry has fast technology updates and fierce competition, but offers high salary levels and development space"
                 },
-                "金融": {
+                "Finance": {
                     "positions": [
                         {
-                            "name": "投资分析师",
-                            "skills": "财务分析, 估值模型, Excel, 金融市场知识",
-                            "education": "金融/经济/会计相关专业本科及以上",
-                            "salary": "12K-30K",
-                            "prospects": "金融行业稳定，晋升路径清晰"
+                            "name": "Investment Analyst",
+                            "skills": "Financial Analysis, Valuation Models, Excel, Financial Market Knowledge",
+                            "education": "Bachelor's degree or above in Finance/Economics/Accounting",
+                            "salary": "$85K-$150K",
+                            "prospects": "Stable financial industry with clear promotion paths"
                         },
                         {
-                            "name": "风险控制",
-                            "skills": "风险评估, 数据分析, 法规知识, 金融工具",
-                            "education": "金融/数学/统计相关专业本科及以上",
-                            "salary": "15K-35K",
-                            "prospects": "风控人才需求稳定，职业发展前景良好"
+                            "name": "Risk Control",
+                            "skills": "Risk Assessment, Data Analysis, Regulatory Knowledge, Financial Instruments",
+                            "education": "Bachelor's degree or above in Finance/Mathematics/Statistics",
+                            "salary": "$90K-$160K",
+                            "prospects": "Stable demand for risk control talent, good career development prospects"
                         }
                     ],
-                    "overview": "金融行业相对稳定，注重专业性和合规性，职业发展体系较为成熟"
+                    "overview": "The financial industry is relatively stable, emphasizing professionalism and compliance, with a mature career development system"
                 }
             },
             "majors": {
-                "计算机科学": {
-                    "suitable_industries": ["IT/互联网", "金融", "教育"],
-                    "suitable_positions": ["软件工程师", "数据分析师", "IT顾问"],
-                    "core_skills": "编程语言, 数据结构, 算法, 数据库, 网络基础",
-                    "career_paths": "可从开发工程师发展为架构师、技术经理或产品经理"
+                "Computer Science": {
+                    "suitable_industries": ["IT/Internet", "Finance", "Education"],
+                    "suitable_positions": ["Software Engineer", "Data Analyst", "IT Consultant"],
+                    "core_skills": "Programming Languages, Data Structures, Algorithms, Databases, Network Fundamentals",
+                    "career_paths": "Can develop from Developer to Architect, Technical Manager, or Product Manager"
                 },
-                "金融学": {
-                    "suitable_industries": ["金融", "咨询", "企业财务"],
-                    "suitable_positions": ["投资分析师", "风险控制", "财务顾问"],
-                    "core_skills": "财务分析, 金融市场, 风险管理, 投资理论",
-                    "career_paths": "可从分析师发展为投资经理、风控经理或财务总监"
+                "Finance": {
+                    "suitable_industries": ["Finance", "Consulting", "Corporate Finance"],
+                    "suitable_positions": ["Investment Analyst", "Risk Control", "Financial Advisor"],
+                    "core_skills": "Financial Analysis, Financial Markets, Risk Management, Investment Theory",
+                    "career_paths": "Can develop from Analyst to Investment Manager, Risk Manager, or CFO"
                 }
             }
         }
@@ -175,11 +174,11 @@ def init_langsmith():
         return None
 
 # Function to call OpenRouter for API requests
-def call_openrouter(messages, model, temperature=0.7):
+def call_openrouter(messages, model, temperature=0.7, is_vision=False):
     try:
         api_key = st.secrets.get("OPENROUTER_API_KEY")
         if not api_key:
-            return "错误：未设置OpenRouter API密钥"
+            return "Error: OpenRouter API key not set"
         
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -193,6 +192,11 @@ def call_openrouter(messages, model, temperature=0.7):
             "temperature": temperature
         }
         
+        # For vision models, we might need additional parameters
+        if is_vision:
+            # Additional vision-specific settings if needed
+            pass
+        
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
@@ -203,48 +207,35 @@ def call_openrouter(messages, model, temperature=0.7):
         if "choices" in result and len(result["choices"]) > 0:
             return result["choices"][0]["message"]["content"]
         else:
-            return f"请求失败: {str(result)}"
+            return f"Request failed: {str(result)}"
     except Exception as e:
-        return f"请求过程中出错: {str(e)}"
+        return f"Error during request: {str(e)}"
 
-# Function to call Qwen VL model for transcript analysis
-def analyze_transcript_with_qwen(image_bytes):
+# Function to analyze transcript with vision model through OpenRouter
+def analyze_transcript_with_vision_model(image_bytes):
     try:
-        # For Qwen VL we'll continue using Qwen's API directly as it has multimodal capabilities
-        api_key = st.secrets.get("QWEN_API_KEY")
+        api_key = st.secrets.get("OPENROUTER_API_KEY")
         if not api_key:
-            return "错误：未设置Qwen API密钥"
+            return "Error: OpenRouter API key not set"
         
         # Convert image to base64
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        # Create message with image
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "This is a transcript. Please identify and extract all course names, credits, and grade information, and organize them into a table format."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }
+        ]
         
-        payload = {
-            "model": "qwen/qwen2.5-vl-72b-instruct",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "这是一份成绩单，请识别并提取出所有课程名称、学分和成绩信息，整理成表格形式。"},
-                        {"type": "image", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]
-                }
-            ]
-        }
-        
-        response = requests.post("https://api.qwen.ai/v1/chat/completions", headers=headers, json=payload)
-        result = response.json()
-        
-        if "choices" in result and len(result["choices"]) > 0:
-            return result["choices"][0]["message"]["content"]
-        else:
-            return f"分析失败: {str(result)}"
+        # Use Qwen's vision model through OpenRouter
+        return call_openrouter(messages, "qwen/qwen2.5-vl-72b-instruct", temperature=0.3, is_vision=True)
     except Exception as e:
-        return f"分析过程中出错: {str(e)}"
+        return f"Error during analysis: {str(e)}"
 
 # Function to render Mermaid diagrams
 def render_mermaid(mermaid_code):
@@ -274,7 +265,7 @@ def check_api_status():
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
                 json={
-                    "model": "qwen/qwen3-32b:free",  # Use one of our allowed models
+                    "model": "qwen/qwen-max",  # Use a default model
                     "messages": [{"role": "user", "content": "Hello"}],
                     "max_tokens": 5
                 }
@@ -284,28 +275,6 @@ def check_api_status():
             st.session_state.api_status["openrouter"] = False
     except:
         st.session_state.api_status["openrouter"] = False
-    
-    # Check Qwen API
-    try:
-        qwen_key = st.secrets.get("QWEN_API_KEY")
-        if qwen_key:
-            headers = {
-                "Authorization": f"Bearer {qwen_key}",
-                "Content-Type": "application/json"
-            }
-            response = requests.post(
-                "https://api.qwen.ai/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": "qwen/qwen2.5-vl-72b-instruct",
-                    "messages": [{"role": "user", "content": "Hello"}]
-                }
-            )
-            st.session_state.api_status["qwen"] = response.status_code == 200
-        else:
-            st.session_state.api_status["qwen"] = False
-    except:
-        st.session_state.api_status["qwen"] = False
     
     # Check LangSmith status
     try:
@@ -328,21 +297,21 @@ def query_knowledge_db(user_inputs):
     if user_inputs['target_industry']:
         industry_data = knowledge_db.query('industry', user_inputs['target_industry'])
         if industry_data:
-            results.append(f"行业概览 - {user_inputs['target_industry']}:\n{industry_data['overview']}")
+            results.append(f"Industry Overview - {user_inputs['target_industry']}:\n{industry_data['overview']}")
             
             # If position is specified, find specific position data
             if user_inputs['target_position']:
                 for position in industry_data['positions']:
                     if position['name'] == user_inputs['target_position']:
-                        results.append(f"岗位详情 - {position['name']}:\n"
-                                      f"所需技能: {position['skills']}\n"
-                                      f"学历要求: {position['education']}\n"
-                                      f"薪资范围: {position['salary']}\n"
-                                      f"发展前景: {position['prospects']}")
+                        results.append(f"Position Details - {position['name']}:\n"
+                                      f"Required Skills: {position['skills']}\n"
+                                      f"Education Requirements: {position['education']}\n"
+                                      f"Salary Range: {position['salary']}\n"
+                                      f"Career Prospects: {position['prospects']}")
                         break
             else:
                 # List all positions in this industry
-                results.append(f"{user_inputs['target_industry']}行业热门岗位:")
+                results.append(f"Popular Positions in {user_inputs['target_industry']}:")
                 for position in industry_data['positions']:
                     results.append(f"- {position['name']}: {position['prospects']}")
     
@@ -350,23 +319,23 @@ def query_knowledge_db(user_inputs):
     if user_inputs['major']:
         major_data = knowledge_db.query('major', user_inputs['major'])
         if major_data:
-            results.append(f"专业就业方向 - {user_inputs['major']}:\n"
-                          f"适合行业: {', '.join(major_data['suitable_industries'])}\n"
-                          f"适合岗位: {', '.join(major_data['suitable_positions'])}\n"
-                          f"核心技能: {major_data['core_skills']}\n"
-                          f"职业路径: {major_data['career_paths']}")
+            results.append(f"Career Directions for {user_inputs['major']} Major:\n"
+                          f"Suitable Industries: {', '.join(major_data['suitable_industries'])}\n"
+                          f"Suitable Positions: {', '.join(major_data['suitable_positions'])}\n"
+                          f"Core Skills: {major_data['core_skills']}\n"
+                          f"Career Paths: {major_data['career_paths']}")
     
     # Query by position (if not already found)
     if user_inputs['target_position'] and not user_inputs['target_industry']:
         position_data = knowledge_db.query('position', user_inputs['target_position'])
         if position_data:
-            results.append(f"岗位详情 - {user_inputs['target_position']}:\n"
-                          f"所需技能: {position_data['skills']}\n"
-                          f"学历要求: {position_data['education']}\n"
-                          f"薪资范围: {position_data['salary']}\n"
-                          f"发展前景: {position_data['prospects']}")
+            results.append(f"Position Details - {user_inputs['target_position']}:\n"
+                          f"Required Skills: {position_data['skills']}\n"
+                          f"Education Requirements: {position_data['education']}\n"
+                          f"Salary Range: {position_data['salary']}\n"
+                          f"Career Prospects: {position_data['prospects']}")
     
-    return "\n\n".join(results) if results else "知识库中未找到相关信息"
+    return "\n\n".join(results) if results else "No relevant information found in the knowledge base"
 
 # Function to generate career planning draft with LangSmith tracking
 def generate_career_planning_draft(user_inputs, agent_settings):
@@ -384,21 +353,21 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         model = agent_settings["model"]
         
         user_info = f"""
-        用户信息:
-        - 本科院校: {user_inputs['university']}
-        - 本科专业: {user_inputs['major']}
-        - 意向行业: {user_inputs['target_industry']}
-        - 意向岗位: {user_inputs['target_position']}
+        User Information:
+        - University: {user_inputs['university']}
+        - Major: {user_inputs['major']}
+        - Target Industry: {user_inputs['target_industry']}
+        - Target Position: {user_inputs['target_position']}
         
-        成绩单信息:
+        Transcript Information:
         {user_inputs['transcript_text']}
         
-        知识库信息:
+        Knowledge Base Information:
         {kb_data}
         """
         
         messages = [
-            {"role": "system", "content": f"{role}\n\n{task}\n\n输出格式要求:\n{output_format}"},
+            {"role": "system", "content": f"{role}\n\n{task}\n\nOutput Format Requirements:\n{output_format}"},
             {"role": "user", "content": user_info}
         ]
         
@@ -428,7 +397,7 @@ def generate_career_planning_draft(user_inputs, agent_settings):
                 temperature=0.7
             )
     except Exception as e:
-        return f"生成过程中出错: {str(e)}"
+        return f"Error during generation: {str(e)}"
 
 # Function to generate final career planning report with LangSmith tracking
 def generate_final_report(draft_report, agent_settings):
@@ -443,8 +412,8 @@ def generate_final_report(draft_report, agent_settings):
         model = agent_settings["model"]
         
         messages = [
-            {"role": "system", "content": f"{role}\n\n{task}\n\n输出格式要求:\n{output_format}\n\n请在适当的地方加入Mermaid图表，用```mermaid和```包裹图表代码。"},
-            {"role": "user", "content": f"这是职业规划报告初稿:\n\n{draft_report}\n\n请基于此初稿，补充相关信息，并制作一份包含文字和图表的完整报告。"}
+            {"role": "system", "content": f"{role}\n\n{task}\n\nOutput Format Requirements:\n{output_format}\n\nPlease include Mermaid diagrams at appropriate places, wrapped in ```mermaid and ``` tags. Create at least one mind map diagram of the career path and one flowchart or timeline of recommended actions."},
+            {"role": "user", "content": f"Here is the career planning report draft:\n\n{draft_report}\n\nBased on this draft, please supplement with relevant information and create a complete report with text and diagrams."}
         ]
         
         # Track with LangSmith if available
@@ -473,49 +442,52 @@ def generate_final_report(draft_report, agent_settings):
                 temperature=0.7
             )
     except Exception as e:
-        return f"生成过程中出错: {str(e)}"
+        return f"Error during generation: {str(e)}"
+
+# Check API status on startup
+check_api_status()
 
 # Main application interface
-st.title("职业规划助理")
+st.title("Career Planning Assistant")
 
 # Create tabs
-tab1, tab2, tab3 = st.tabs(["信息收集", "助理设置", "API状态"])
+tab1, tab2, tab3 = st.tabs(["Information Collection", "Agent Settings", "API Status"])
 
 # Tab 1: Information Collection
 with tab1:
-    st.header("用户信息收集")
+    st.header("User Information Collection")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        university = st.text_input("本科院校", value=st.session_state.user_inputs["university"])
-        major = st.text_input("本科专业", value=st.session_state.user_inputs["major"])
+        university = st.text_input("University", value=st.session_state.user_inputs["university"])
+        major = st.text_input("Major", value=st.session_state.user_inputs["major"])
     
     with col2:
-        target_industry = st.text_input("意向行业", value=st.session_state.user_inputs["target_industry"])
-        target_position = st.text_input("意向岗位", value=st.session_state.user_inputs["target_position"])
+        target_industry = st.text_input("Target Industry", value=st.session_state.user_inputs["target_industry"])
+        target_position = st.text_input("Target Position", value=st.session_state.user_inputs["target_position"])
     
     # Transcript upload
-    uploaded_file = st.file_uploader("上传成绩单（仅支持图片格式）", type=['png', 'jpg', 'jpeg'])
+    uploaded_file = st.file_uploader("Upload Transcript (Image formats only)", type=['png', 'jpg', 'jpeg'])
     
     transcript_text = ""
     if uploaded_file is not None:
         # Read the file
         image_bytes = uploaded_file.getvalue()
         
-        # Call Qwen VL model to analyze the transcript
-        with st.spinner("正在分析成绩单..."):
-            transcript_text = analyze_transcript_with_qwen(image_bytes)
+        # Call vision model to analyze the transcript
+        with st.spinner("Analyzing transcript..."):
+            transcript_text = analyze_transcript_with_vision_model(image_bytes)
         
         # Display the analysis result in an expandable section
-        with st.expander("成绩单分析结果", expanded=True):
+        with st.expander("Transcript Analysis Result", expanded=True):
             st.write(transcript_text)
     
     # Store user inputs in session state
-    if st.button("开始分析"):
+    if st.button("Start Analysis"):
         # Validate inputs
         if not (major or target_industry or target_position):
-            st.error("错误：本科专业、意向行业和意向岗位必须至少填写一项")
+            st.error("Error: At least one of Major, Target Industry, or Target Position must be filled")
         else:
             st.session_state.user_inputs = {
                 "university": university,
@@ -526,7 +498,7 @@ with tab1:
             }
             
             # Generate career planning draft
-            with st.spinner("正在生成职业规划报告草稿..."):
+            with st.spinner("Generating career planning report draft..."):
                 draft_report = generate_career_planning_draft(
                     st.session_state.user_inputs,
                     st.session_state.career_agent_settings
@@ -534,11 +506,11 @@ with tab1:
                 st.session_state.draft_report = draft_report
             
             # Display the draft report
-            st.subheader("职业规划报告草稿")
+            st.subheader("Career Planning Report Draft")
             st.write(st.session_state.draft_report)
             
             # Generate final report
-            with st.spinner("正在生成最终职业规划报告..."):
+            with st.spinner("Generating final career planning report..."):
                 final_report = generate_final_report(
                     st.session_state.draft_report,
                     st.session_state.submission_agent_settings
@@ -546,7 +518,7 @@ with tab1:
                 st.session_state.final_report = final_report
             
             # Display the final report
-            st.subheader("最终职业规划报告")
+            st.subheader("Final Career Planning Report")
             
             # Process and display text and Mermaid diagrams separately
             report_parts = st.session_state.final_report.split("```mermaid")
@@ -570,35 +542,35 @@ with tab1:
 
 # Tab 2: Agent Settings
 with tab2:
-    st.header("助理设置")
+    st.header("Agent Settings")
     
-    st.subheader("职业规划助理设置")
-    career_role = st.text_area("人物设定", value=st.session_state.career_agent_settings["role"], height=100)
-    career_task = st.text_area("任务描述", value=st.session_state.career_agent_settings["task"], height=100)
-    career_output_format = st.text_area("输出格式", value=st.session_state.career_agent_settings["output_format"], height=150)
+    st.subheader("Career Planning Assistant Settings")
+    career_role = st.text_area("Character Setting", value=st.session_state.career_agent_settings["role"], height=100)
+    career_task = st.text_area("Task Description", value=st.session_state.career_agent_settings["task"], height=100)
+    career_output_format = st.text_area("Output Format", value=st.session_state.career_agent_settings["output_format"], height=150)
     
     # Add model selection dropdown for career planning agent
     career_model = st.selectbox(
-        "选择职业规划助理模型", 
+        "Select Career Planning Assistant Model", 
         options=list(AVAILABLE_MODELS.keys()),
         format_func=lambda x: AVAILABLE_MODELS[x],
         index=list(AVAILABLE_MODELS.keys()).index(st.session_state.career_agent_settings["model"])
     )
     
-    st.subheader("交稿助理设置")
-    submission_role = st.text_area("人物设定", value=st.session_state.submission_agent_settings["role"], height=100)
-    submission_task = st.text_area("任务描述", value=st.session_state.submission_agent_settings["task"], height=100)
-    submission_output_format = st.text_area("输出格式", value=st.session_state.submission_agent_settings["output_format"], height=150)
+    st.subheader("Report Submission Assistant Settings")
+    submission_role = st.text_area("Character Setting", value=st.session_state.submission_agent_settings["role"], height=100)
+    submission_task = st.text_area("Task Description", value=st.session_state.submission_agent_settings["task"], height=100)
+    submission_output_format = st.text_area("Output Format", value=st.session_state.submission_agent_settings["output_format"], height=150)
     
     # Add model selection dropdown for submission agent
     submission_model = st.selectbox(
-        "选择交稿助理模型", 
+        "Select Report Submission Assistant Model", 
         options=list(AVAILABLE_MODELS.keys()),
         format_func=lambda x: AVAILABLE_MODELS[x],
         index=list(AVAILABLE_MODELS.keys()).index(st.session_state.submission_agent_settings["model"])
     )
     
-    if st.button("保存设置"):
+    if st.button("Save Settings"):
         st.session_state.career_agent_settings = {
             "role": career_role,
             "task": career_task,
@@ -613,35 +585,30 @@ with tab2:
             "model": submission_model
         }
         
-        st.success("设置已保存")
+        st.success("Settings saved successfully")
 
 # Tab 3: API Status
 with tab3:
-    st.header("API状态检测")
+    st.header("API Status")
     
-    if st.button("检测API状态"):
-        with st.spinner("正在检测API状态..."):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        status = "✅ Connected" if st.session_state.api_status["openrouter"] else "❌ Not Connected"
+        st.metric("OpenRouter API", status)
+        
+        if not st.session_state.api_status["openrouter"]:
+            st.warning("Please check if the OPENROUTER_API_KEY is correctly set in Streamlit Secrets")
+    
+    with col2:
+        status = "✅ Connected" if st.session_state.api_status["langsmith"] else "❌ Not Connected"
+        st.metric("LangSmith", status)
+        
+        if not st.session_state.api_status["langsmith"]:
+            st.warning("Please check if the LANGSMITH_API_KEY is correctly set in Streamlit Secrets")
+    
+    # Add a refresh button for API status
+    if st.button("Refresh Status"):
+        with st.spinner("Checking API status..."):
             check_api_status()
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            status = "✅ 正常" if st.session_state.api_status["openrouter"] else "❌ 异常"
-            st.metric("OpenRouter API", status)
-            
-            if not st.session_state.api_status["openrouter"]:
-                st.warning("请检查Streamlit Secrets中的OPENROUTER_API_KEY是否正确设置")
-        
-        with col2:
-            status = "✅ 正常" if st.session_state.api_status["qwen"] else "❌ 异常"
-            st.metric("Qwen API", status)
-            
-            if not st.session_state.api_status["qwen"]:
-                st.warning("请检查Streamlit Secrets中的QWEN_API_KEY是否正确设置")
-        
-        with col3:
-            status = "✅ 正常" if st.session_state.api_status["langsmith"] else "❌ 异常"
-            st.metric("LangSmith", status)
-            
-            if not st.session_state.api_status["langsmith"]:
-                st.warning("请检查Streamlit Secrets中的LANGSMITH_API_KEY是否正确设置") 
+        st.rerun() 
