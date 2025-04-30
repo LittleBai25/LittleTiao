@@ -28,6 +28,69 @@ st.set_page_config(
     layout="wide"
 )
 
+# Function to check API status - 移动到文件前面
+def check_api_status():
+    # Check OpenRouter API
+    try:
+        openrouter_key = st.secrets.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+            headers = {
+                "Authorization": f"Bearer {openrouter_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://career-planner.streamlit.app"
+            }
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": "qwen/qwen-max",  # Use a default model
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "max_tokens": 5
+                }
+            )
+            st.session_state.api_status["openrouter"] = response.status_code == 200
+        else:
+            st.session_state.api_status["openrouter"] = False
+    except Exception as e:
+        st.error(f"OpenRouter API error: {str(e)}")
+        st.session_state.api_status["openrouter"] = False
+    
+    # Check LangSmith status
+    try:
+        langsmith_key = st.secrets.get("LANGSMITH_API_KEY")
+        if langsmith_key:
+            # 确保环境变量设置正确
+            os.environ["LANGSMITH_API_KEY"] = langsmith_key
+            os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
+            
+            # 创建客户端并测试连接 (仅在API状态页面显示消息)
+            client = Client(api_key=langsmith_key)
+            
+            # 简单地使用API调用来验证连接，不使用get_project方法
+            try:
+                # 尝试创建一个简单的运行来测试API连接
+                run_tree = RunTree(
+                    name="test_connection",
+                    run_type="chain",
+                    inputs={"test": "connection"},
+                    client=client
+                )
+                run_tree.post()
+                run_tree.end(outputs={"result": "success"})
+                st.session_state.api_status["langsmith"] = True
+                # 不显示成功消息，只在API状态页面显示
+            except Exception as inner_e:
+                st.error(f"LangSmith API连接测试失败: {str(inner_e)}")
+                st.session_state.api_status["langsmith"] = False
+        else:
+            st.session_state.api_status["langsmith"] = False
+            st.warning("LangSmith API密钥未设置")
+    except Exception as e:
+        st.error(f"LangSmith API error: {str(e)}")
+        st.session_state.api_status["langsmith"] = False
+
 # 调用OpenRouter的函数 - 移至前面，确保在其他函数调用前定义
 def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name="openrouter_call"):
     """调用OpenRouter API获取LLM响应"""
@@ -642,67 +705,4 @@ with tab3:
     if st.button("刷新状态"):
         with st.spinner("正在检查API状态..."):
             check_api_status()
-        st.rerun()
-
-# Function to check API status
-def check_api_status():
-    # Check OpenRouter API
-    try:
-        openrouter_key = st.secrets.get("OPENROUTER_API_KEY")
-        if openrouter_key:
-            headers = {
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://career-planner.streamlit.app"
-            }
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": "qwen/qwen-max",  # Use a default model
-                    "messages": [{"role": "user", "content": "Hello"}],
-                    "max_tokens": 5
-                }
-            )
-            st.session_state.api_status["openrouter"] = response.status_code == 200
-        else:
-            st.session_state.api_status["openrouter"] = False
-    except Exception as e:
-        st.error(f"OpenRouter API error: {str(e)}")
-        st.session_state.api_status["openrouter"] = False
-    
-    # Check LangSmith status
-    try:
-        langsmith_key = st.secrets.get("LANGSMITH_API_KEY")
-        if langsmith_key:
-            # 确保环境变量设置正确
-            os.environ["LANGSMITH_API_KEY"] = langsmith_key
-            os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
-            
-            # 创建客户端并测试连接 (仅在API状态页面显示消息)
-            client = Client(api_key=langsmith_key)
-            
-            # 简单地使用API调用来验证连接，不使用get_project方法
-            try:
-                # 尝试创建一个简单的运行来测试API连接
-                run_tree = RunTree(
-                    name="test_connection",
-                    run_type="chain",
-                    inputs={"test": "connection"},
-                    client=client
-                )
-                run_tree.post()
-                run_tree.end(outputs={"result": "success"})
-                st.session_state.api_status["langsmith"] = True
-                # 不显示成功消息，只在API状态页面显示
-            except Exception as inner_e:
-                st.error(f"LangSmith API连接测试失败: {str(inner_e)}")
-                st.session_state.api_status["langsmith"] = False
-        else:
-            st.session_state.api_status["langsmith"] = False
-            st.warning("LangSmith API密钥未设置")
-    except Exception as e:
-        st.error(f"LangSmith API error: {str(e)}")
-        st.session_state.api_status["langsmith"] = False 
+        st.rerun() 
