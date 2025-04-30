@@ -194,68 +194,132 @@ if 'api_status' not in st.session_state:
 # Simulated knowledge database
 class KnowledgeDatabase:
     def __init__(self):
-        # This would be replaced with an actual database connection in production
-        self.data = {
-            "industries": {
-                "IT/Internet": {
-                    "positions": [
-                        {
-                            "name": "Software Engineer",
-                            "skills": "Python, Java, JavaScript, Data Structures, Algorithms",
-                            "education": "Bachelor's degree or above in Computer Science/Software Engineering",
-                            "salary": "$80K-$150K",
-                            "prospects": "Continuous industry demand, broad development space"
-                        },
-                        {
-                            "name": "Frontend Developer",
-                            "skills": "HTML, CSS, JavaScript, React/Vue/Angular, TypeScript",
-                            "education": "Bachelor's degree or above in Computer Science related majors",
-                            "salary": "$70K-$130K",
-                            "prospects": "High demand with continuous internet product development"
-                        },
-                        {
-                            "name": "Data Analyst",
-                            "skills": "SQL, Python, R, Excel, Data Visualization, Statistics",
-                            "education": "Bachelor's degree or above in Statistics/Mathematics/Computer Science",
-                            "salary": "$75K-$140K",
-                            "prospects": "Scarce talent in the big data era, good development prospects"
-                        }
-                    ],
-                    "overview": "The IT/Internet industry has fast technology updates and fierce competition, but offers high salary levels and development space"
-                },
-                "Finance": {
-                    "positions": [
-                        {
-                            "name": "Investment Analyst",
-                            "skills": "Financial Analysis, Valuation Models, Excel, Financial Market Knowledge",
-                            "education": "Bachelor's degree or above in Finance/Economics/Accounting",
-                            "salary": "$85K-$150K",
-                            "prospects": "Stable financial industry with clear promotion paths"
-                        },
-                        {
-                            "name": "Risk Control",
-                            "skills": "Risk Assessment, Data Analysis, Regulatory Knowledge, Financial Instruments",
-                            "education": "Bachelor's degree or above in Finance/Mathematics/Statistics",
-                            "salary": "$90K-$160K",
-                            "prospects": "Stable demand for risk control talent, good career development prospects"
-                        }
-                    ],
-                    "overview": "The financial industry is relatively stable, emphasizing professionalism and compliance, with a mature career development system"
+        # Load data from CSV file
+        try:
+            self.df = pd.read_csv("模拟数据库.csv")
+            self.industries = {}
+            self.majors = {}
+            
+            # Process data from CSV
+            for _, row in self.df.iterrows():
+                industry = row["行业"]
+                position = row["岗位"]
+                skill_group = row["技能组"]
+                skill_meaning = row["技能组意义"]
+                knowledge_l1 = row["知识树-1级"]
+                knowledge_l2 = row["知识树-2级"]
+                
+                # Create or get industry
+                if industry not in self.industries:
+                    self.industries[industry] = {
+                        "positions": [],
+                        "overview": f"{industry}行业需要各种专业技能，提供多种职业发展路径。"
+                    }
+                
+                # Check if position already exists
+                position_exists = False
+                for pos in self.industries[industry]["positions"]:
+                    if pos["name"] == position:
+                        position_exists = True
+                        # Update skills if not already included
+                        if skill_group not in pos["skills"]:
+                            pos["skills"] += f", {skill_group}"
+                        break
+                
+                # Add new position if not exists
+                if not position_exists:
+                    self.industries[industry]["positions"].append({
+                        "name": position,
+                        "skills": skill_group,
+                        "knowledge": f"{knowledge_l1}: {knowledge_l2}",
+                        "education": "相关领域的学士及以上学位",
+                        "skill_description": skill_meaning,
+                        "prospects": "行业需求稳定，专业发展前景良好",
+                        "salary": "根据经验和技能水平，薪资范围会有所不同"
+                    })
+            
+            # Create major data based on industry connections
+            unique_knowledge = set(self.df["知识树-1级"].unique())
+            for knowledge in unique_knowledge:
+                relevant_rows = self.df[self.df["知识树-1级"] == knowledge]
+                relevant_industries = relevant_rows["行业"].unique()
+                relevant_positions = relevant_rows["岗位"].unique()
+                
+                self.majors[knowledge] = {
+                    "suitable_industries": list(relevant_industries),
+                    "suitable_positions": list(relevant_positions),
+                    "core_skills": ", ".join(relevant_rows["技能组"].unique()),
+                    "career_paths": f"可从初级职位发展到高级职位，如{', '.join(relevant_positions[:3]) if len(relevant_positions) >= 3 else ', '.join(relevant_positions)}"
                 }
+                
+            print(f"Successfully loaded data from CSV: {len(self.industries)} industries, {len(self.majors)} majors")
+        except Exception as e:
+            print(f"Error loading CSV data: {str(e)}")
+            # Fallback to demo data
+            self.initialize_demo_data()
+    
+    def initialize_demo_data(self):
+        # This demo data is used as fallback if CSV loading fails
+        self.industries = {
+            "IT/Internet": {
+                "positions": [
+                    {
+                        "name": "Software Engineer",
+                        "skills": "Python, Java, JavaScript, Data Structures, Algorithms",
+                        "education": "Bachelor's degree or above in Computer Science/Software Engineering",
+                        "salary": "$80K-$150K",
+                        "prospects": "Continuous industry demand, broad development space"
+                    },
+                    {
+                        "name": "Frontend Developer",
+                        "skills": "HTML, CSS, JavaScript, React/Vue/Angular, TypeScript",
+                        "education": "Bachelor's degree or above in Computer Science related majors",
+                        "salary": "$70K-$130K",
+                        "prospects": "High demand with continuous internet product development"
+                    },
+                    {
+                        "name": "Data Analyst",
+                        "skills": "SQL, Python, R, Excel, Data Visualization, Statistics",
+                        "education": "Bachelor's degree or above in Statistics/Mathematics/Computer Science",
+                        "salary": "$75K-$140K",
+                        "prospects": "Scarce talent in the big data era, good development prospects"
+                    }
+                ],
+                "overview": "The IT/Internet industry has fast technology updates and fierce competition, but offers high salary levels and development space"
             },
-            "majors": {
-                "Computer Science": {
-                    "suitable_industries": ["IT/Internet", "Finance", "Education"],
-                    "suitable_positions": ["Software Engineer", "Data Analyst", "IT Consultant"],
-                    "core_skills": "Programming Languages, Data Structures, Algorithms, Databases, Network Fundamentals",
-                    "career_paths": "Can develop from Developer to Architect, Technical Manager, or Product Manager"
-                },
-                "Finance": {
-                    "suitable_industries": ["Finance", "Consulting", "Corporate Finance"],
-                    "suitable_positions": ["Investment Analyst", "Risk Control", "Financial Advisor"],
-                    "core_skills": "Financial Analysis, Financial Markets, Risk Management, Investment Theory",
-                    "career_paths": "Can develop from Analyst to Investment Manager, Risk Manager, or CFO"
-                }
+            "Finance": {
+                "positions": [
+                    {
+                        "name": "Investment Analyst",
+                        "skills": "Financial Analysis, Valuation Models, Excel, Financial Market Knowledge",
+                        "education": "Bachelor's degree or above in Finance/Economics/Accounting",
+                        "salary": "$85K-$150K",
+                        "prospects": "Stable financial industry with clear promotion paths"
+                    },
+                    {
+                        "name": "Risk Control",
+                        "skills": "Risk Assessment, Data Analysis, Regulatory Knowledge, Financial Instruments",
+                        "education": "Bachelor's degree or above in Finance/Mathematics/Statistics",
+                        "salary": "$90K-$160K",
+                        "prospects": "Stable demand for risk control talent, good career development prospects"
+                    }
+                ],
+                "overview": "The financial industry is relatively stable, emphasizing professionalism and compliance, with a mature career development system"
+            }
+        }
+        
+        self.majors = {
+            "Computer Science": {
+                "suitable_industries": ["IT/Internet", "Finance", "Education"],
+                "suitable_positions": ["Software Engineer", "Data Analyst", "IT Consultant"],
+                "core_skills": "Programming Languages, Data Structures, Algorithms, Databases, Network Fundamentals",
+                "career_paths": "Can develop from Developer to Architect, Technical Manager, or Product Manager"
+            },
+            "Finance": {
+                "suitable_industries": ["Finance", "Consulting", "Corporate Finance"],
+                "suitable_positions": ["Investment Analyst", "Risk Control", "Financial Advisor"],
+                "core_skills": "Financial Analysis, Financial Markets, Risk Management, Investment Theory",
+                "career_paths": "Can develop from Analyst to Investment Manager, Risk Manager, or CFO"
             }
         }
     
@@ -264,13 +328,13 @@ class KnowledgeDatabase:
         Query the database with different query types
         query_type can be: 'industry', 'position', 'major'
         """
-        if query_type == 'industry' and query_value in self.data['industries']:
-            return self.data['industries'][query_value]
-        elif query_type == 'major' and query_value in self.data['majors']:
-            return self.data['majors'][query_value]
+        if query_type == 'industry' and query_value in self.industries:
+            return self.industries[query_value]
+        elif query_type == 'major' and query_value in self.majors:
+            return self.majors[query_value]
         elif query_type == 'position':
             # Search for position across all industries
-            for industry, industry_data in self.data['industries'].items():
+            for industry, industry_data in self.industries.items():
                 for position in industry_data['positions']:
                     if position['name'] == query_value:
                         return position
@@ -336,45 +400,116 @@ def query_knowledge_db(user_inputs):
     if user_inputs['target_industry']:
         industry_data = knowledge_db.query('industry', user_inputs['target_industry'])
         if industry_data:
-            results.append(f"Industry Overview - {user_inputs['target_industry']}:\n{industry_data['overview']}")
+            results.append(f"行业概览 - {user_inputs['target_industry']}:\n{industry_data['overview']}")
             
             # If position is specified, find specific position data
             if user_inputs['target_position']:
+                found = False
                 for position in industry_data['positions']:
                     if position['name'] == user_inputs['target_position']:
-                        results.append(f"Position Details - {position['name']}:\n"
-                                      f"Required Skills: {position['skills']}\n"
-                                      f"Education Requirements: {position['education']}\n"
-                                      f"Salary Range: {position['salary']}\n"
-                                      f"Career Prospects: {position['prospects']}")
+                        found = True
+                        # Check if we have new fields in our updated model
+                        if 'skill_description' in position:
+                            results.append(f"职位详情 - {position['name']}:\n"
+                                          f"所需技能: {position['skills']}\n"
+                                          f"技能详细描述: {position.get('skill_description', '无相关描述')}\n"
+                                          f"相关知识领域: {position.get('knowledge', '无特定知识领域')}\n"
+                                          f"教育要求: {position['education']}\n"
+                                          f"薪资范围: {position['salary']}\n"
+                                          f"职业前景: {position['prospects']}")
+                        else:
+                            results.append(f"职位详情 - {position['name']}:\n"
+                                          f"所需技能: {position['skills']}\n"
+                                          f"教育要求: {position['education']}\n"
+                                          f"薪资范围: {position['salary']}\n"
+                                          f"职业前景: {position['prospects']}")
                         break
+                
+                if not found:
+                    results.append(f"在{user_inputs['target_industry']}行业中未找到{user_inputs['target_position']}职位的详细信息。")
+                    # List similar positions as alternatives
+                    results.append(f"{user_inputs['target_industry']}行业中的其他职位:")
+                    for position in industry_data['positions']:
+                        results.append(f"- {position['name']}: {position.get('skills', '无技能信息')}")
             else:
                 # List all positions in this industry
-                results.append(f"Popular Positions in {user_inputs['target_industry']}:")
+                results.append(f"{user_inputs['target_industry']}行业中的热门职位:")
                 for position in industry_data['positions']:
-                    results.append(f"- {position['name']}: {position['prospects']}")
+                    skills_summary = position['skills'].split(',')[0:3] if ',' in position['skills'] else [position['skills']]
+                    skills_text = ', '.join(skills_summary)
+                    results.append(f"- {position['name']}: 技能要求({skills_text}), {position['prospects']}")
     
     # Query by major
     if user_inputs['major']:
         major_data = knowledge_db.query('major', user_inputs['major'])
         if major_data:
-            results.append(f"Career Directions for {user_inputs['major']} Major:\n"
-                          f"Suitable Industries: {', '.join(major_data['suitable_industries'])}\n"
-                          f"Suitable Positions: {', '.join(major_data['suitable_positions'])}\n"
-                          f"Core Skills: {major_data['core_skills']}\n"
-                          f"Career Paths: {major_data['career_paths']}")
+            results.append(f"{user_inputs['major']}专业的职业方向:\n"
+                          f"适合的行业: {', '.join(major_data['suitable_industries'])}\n"
+                          f"适合的职位: {', '.join(major_data['suitable_positions'])}\n"
+                          f"核心技能: {major_data['core_skills']}\n"
+                          f"职业发展路径: {major_data['career_paths']}")
+        else:
+            # Try fuzzy match with knowledge areas
+            found = False
+            for major_name, major_info in knowledge_db.majors.items():
+                if user_inputs['major'] in major_name or major_name in user_inputs['major']:
+                    results.append(f"未找到完全匹配的专业，但找到相关专业 {major_name}:\n"
+                                 f"适合的行业: {', '.join(major_info['suitable_industries'])}\n"
+                                 f"适合的职位: {', '.join(major_info['suitable_positions'])}\n"
+                                 f"核心技能: {major_info['core_skills']}\n"
+                                 f"职业发展路径: {major_info['career_paths']}")
+                    found = True
+                    break
+            
+            if not found:
+                results.append(f"未找到与{user_inputs['major']}专业直接相关的信息。建议考虑以下知识领域:")
+                for major_name in list(knowledge_db.majors.keys())[:5]:  # List top 5 available majors
+                    results.append(f"- {major_name}")
     
     # Query by position (if not already found)
     if user_inputs['target_position'] and not user_inputs['target_industry']:
-        position_data = knowledge_db.query('position', user_inputs['target_position'])
-        if position_data:
-            results.append(f"Position Details - {user_inputs['target_position']}:\n"
-                          f"Required Skills: {position_data['skills']}\n"
-                          f"Education Requirements: {position_data['education']}\n"
-                          f"Salary Range: {position_data['salary']}\n"
-                          f"Career Prospects: {position_data['prospects']}")
+        position_found = False
+        for industry, industry_data in knowledge_db.industries.items():
+            for position in industry_data['positions']:
+                if position['name'] == user_inputs['target_position']:
+                    position_found = True
+                    results.append(f"职位详情 - {position['name']} (在{industry}行业中):\n"
+                                  f"所需技能: {position['skills']}\n"
+                                  f"技能详细描述: {position.get('skill_description', '无相关描述')}\n"
+                                  f"相关知识领域: {position.get('knowledge', '无特定知识领域')}\n"
+                                  f"教育要求: {position['education']}\n"
+                                  f"薪资范围: {position['salary']}\n"
+                                  f"职业前景: {position['prospects']}")
+                    break
+            if position_found:
+                break
+        
+        if not position_found:
+            results.append(f"未找到{user_inputs['target_position']}职位的详细信息。")
+            # Try to suggest similar positions
+            similar_positions = []
+            for industry, industry_data in knowledge_db.industries.items():
+                for position in industry_data['positions']:
+                    if user_inputs['target_position'] in position['name'] or position['name'] in user_inputs['target_position']:
+                        similar_positions.append((position['name'], industry))
+            
+            if similar_positions:
+                results.append("可能相关的职位:")
+                for pos, ind in similar_positions:
+                    results.append(f"- {pos} (在{ind}行业)")
     
-    return "\n\n".join(results) if results else "No relevant information found in the knowledge base"
+    # If no specific queries matched, provide general industry overview
+    if not results:
+        results.append("知识库中未找到与您的查询直接匹配的信息。")
+        results.append("可用的行业信息:")
+        for industry in knowledge_db.industries.keys():
+            results.append(f"- {industry}")
+        
+        results.append("\n可用的知识领域:")
+        for major in knowledge_db.majors.keys():
+            results.append(f"- {major}")
+    
+    return "\n\n".join(results)
 
 # 使用 @traceable 装饰器追踪生成职业规划草稿的过程
 @traceable(run_type="chain", name="职业规划草稿生成")
@@ -400,12 +535,22 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         成绩单信息:
         {user_inputs['transcript_text']}
         
-        知识库信息:
+        知识库信息 (非常重要，请务必详细参考这些信息):
         {kb_data}
         """
         
+        system_prompt = f"""{role}
+
+{task}
+
+请务必详细参考知识库中提供的信息，这些是真实的行业和职位数据，对职业规划至关重要。根据用户的专业、目标和知识库信息，提供有针对性的职业建议。
+
+输出格式要求:
+{output_format}
+"""
+        
         messages = [
-            {"role": "system", "content": f"{role}\n\n{task}\n\n输出格式要求:\n{output_format}"},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_info}
         ]
         
@@ -438,6 +583,8 @@ def generate_final_report(draft_report, agent_settings):
         system_prompt = f"""{role}
 
 {task}
+
+请基于草稿中的数据和行业信息，确保最终报告详细反映知识库中的专业数据。这些行业和职位信息是真实的，应该在报告中得到充分展示。
 
 输出格式要求:
 {output_format}
