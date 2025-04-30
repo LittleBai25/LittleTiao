@@ -749,10 +749,10 @@ def generate_final_report(draft_report, agent_settings):
 2. 图表要视觉上美观，使用flowchart语法
 3. 创建一个清晰的职业路径流程图，展示用户可能的职业发展历程
 4. 使用合适的节点形状来区分不同类型的内容，例如:
-   - 方框 [文本] 用于表示基本步骤
-   - 圆角框 (文本) 用于表示过程/阶段
-   - 圆形 ((文本)) 用于表示起点/终点
-   - 菱形 {文本} 用于表示决策点
+   - 方框 ["文本"] 用于表示基本步骤
+   - 圆角框 ("文本") 用于表示过程/阶段
+   - 圆形 (("文本")) 用于表示起点/终点
+   - 菱形 {"文本"} 用于表示决策点
 5. 节点之间的连接应清晰展示职业路径的流向
 6. 节点数量控制在5-8个之间，确保图表简洁明了
 7. 避免在节点文字中使用特殊字符和标点符号
@@ -761,36 +761,79 @@ def generate_final_report(draft_report, agent_settings):
 美观的Mermaid图表示例：
 ```mermaid
 flowchart TD
-    A[学习专业知识] --> B(实习机会)
-    B --> C{选择方向}
-    C -->|技术路线| D[初级工程师]
-    C -->|管理路线| E[项目助理]
-    D --> F[高级工程师]
-    E --> G[项目经理]
+    A["学习专业知识"] --> B("实习机会")
+    B --> C{"选择方向"}
+    C -->|"技术路线"| D["初级工程师"]
+    C -->|"管理路线"| E["项目助理"]
+    D --> F["高级工程师"]
+    E --> G["项目经理"]
 ```
 
-注意：请确保创建视觉上美观且富有信息量的图表，这是报告的重要组成部分。
+重要提示：
+1. 所有节点文字必须使用双引号，如 A["节点内容"] 而不是 A[节点内容]
+2. 所有连接标签也需要使用双引号，如 -->|"标签"| 
+3. 请不要直接使用`文本`、`节点`等作为变量名，这会导致错误
+4. 确保创建视觉上美观且富有信息量的图表，这是报告的重要组成部分
+
 所有内容请使用中文输出。
 """
         
+        user_prompt = f"""这是职业规划报告草稿：
+
+{draft_report}
+
+基于这份草稿，请补充相关信息，创建一份包含文字和一个简单流程图的完整报告。图表必须使用双引号包裹所有节点文字，例如 A["节点内容"] 而不是 A[节点内容]。请用中文输出所有内容。"""
+        
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和一个简单流程图的完整报告。图表必须非常简单，仅使用基本节点和连接。请用中文输出所有内容。"}
+            {"role": "user", "content": user_prompt}
         ]
         
         # Make API call through OpenRouter
-        response = call_openrouter(
-            messages=messages, 
-            model=model, 
-            temperature=0.7,
-            run_name="报告生成AI调用"
-        )
-        
-        return response
+        try:
+            response = call_openrouter(
+                messages=messages, 
+                model=model, 
+                temperature=0.7,
+                run_name="报告生成AI调用"
+            )
+            
+            # 检查响应是否包含潜在问题
+            if "文本" in response and not ('"文本"' in response or "'文本'" in response):
+                # 如果发现未引用的"文本"关键字，尝试修复
+                print("检测到潜在的文本引用问题，尝试二次生成...")
+                
+                # 添加更明确的指示
+                additional_prompt = {"role": "user", "content": "请确保在Mermaid图表中所有节点文字都使用双引号包裹，避免直接使用变量名。例如正确的写法是A[\"实际内容\"]而不是A[文本]。"}
+                messages.append(additional_prompt)
+                
+                # 重新调用API
+                response = call_openrouter(
+                    messages=messages, 
+                    model=model, 
+                    temperature=0.7,
+                    run_name="报告生成修复调用"
+                )
+            
+            return response
+        except Exception as inner_e:
+            # 更详细的内部错误处理
+            print(f"API调用错误: {str(inner_e)}")
+            # 尝试使用备用方法
+            fallback_message = [
+                {"role": "system", "content": "你是一位专业的职业规划顾问。请基于提供的草稿生成一份简单报告，不要包含任何复杂的格式或图表代码。"},
+                {"role": "user", "content": f"基于这份草稿创建一份简单的文本报告(不要包含任何图表代码):\n\n{draft_report}"}
+            ]
+            return call_openrouter(
+                messages=fallback_message,
+                model=model,
+                temperature=0.7,
+                run_name="报告生成备用调用"
+            )
     except Exception as e:
         error_msg = f"报告生成过程中发生错误: {str(e)}"
         print(error_msg)
-        return error_msg
+        return f"生成报告时遇到问题。请查看错误信息: {str(e)}\n\n以下是原始草稿:\n\n{draft_report}"
 
 # Check API status on startup
 check_api_status()
@@ -859,76 +902,85 @@ with tab1:
             
             # Generate final report
             with st.spinner("Generating final career planning report..."):
-                final_report = generate_final_report(
-                    st.session_state.draft_report,
-                    st.session_state.submission_agent_settings
-                )
-                st.session_state.final_report = final_report
+                try:
+                    final_report = generate_final_report(
+                        st.session_state.draft_report,
+                        st.session_state.submission_agent_settings
+                    )
+                    st.session_state.final_report = final_report
+                except Exception as e:
+                    st.error(f"生成最终报告时发生错误: {str(e)}")
+                    st.session_state.final_report = f"无法生成完整报告，请查看草稿内容:\n\n{st.session_state.draft_report}"
             
             # Display the final report
             st.subheader("Final Career Planning Report")
             
             # 显示报告内容
             if st.session_state.final_report:
-                # 更新处理图表的方式，添加更多健壮性
-                try:
-                    # 检查是否包含Mermaid图表
-                    if "```mermaid" in st.session_state.final_report:
-                        # Process and display text and Mermaid diagrams separately
-                        report_parts = st.session_state.final_report.split("```mermaid")
-                        
-                        # Display the first text part
-                        if report_parts and len(report_parts) > 0:
-                            st.write(report_parts[0])
-                        
-                        # Process each mermaid diagram and following text
-                        for i in range(1, len(report_parts)):
-                            part = report_parts[i]
-                            # Split by the closing code block marker
-                            if "```" in part:
-                                mermaid_code, remaining_text = part.split("```", 1)
-                                mermaid_code = mermaid_code.strip()
-                                
-                                # 仅提供查看图表代码的选项
-                                with st.expander("查看图表代码"):
-                                    st.code(mermaid_code, language="mermaid")
-                                
-                                # 尝试修复常见的语法错误
-                                if "graph" in mermaid_code and "flowchart" not in mermaid_code:
-                                    # 旧版语法，转换为新版
-                                    mermaid_code = mermaid_code.replace("graph", "flowchart")
-                                
-                                try:
-                                    # 使用优化过的渲染函数展示图表
-                                    render_mermaid(mermaid_code)
-                                except Exception as e:
-                                    st.error(f"图表渲染失败: {str(e)}")
-                                    st.code(mermaid_code, language="mermaid")
+                # 检查是否有错误消息
+                if "生成报告时遇到问题" in st.session_state.final_report or "无法生成完整报告" in st.session_state.final_report:
+                    st.warning("由于图表生成问题，只显示文本报告")
+                    st.write(st.session_state.final_report)
+                else:
+                    # 更新处理图表的方式，添加更多健壮性
+                    try:
+                        # 检查是否包含Mermaid图表
+                        if "```mermaid" in st.session_state.final_report:
+                            # Process and display text and Mermaid diagrams separately
+                            report_parts = st.session_state.final_report.split("```mermaid")
+                            
+                            # Display the first text part
+                            if report_parts and len(report_parts) > 0:
+                                st.write(report_parts[0])
+                            
+                            # Process each mermaid diagram and following text
+                            for i in range(1, len(report_parts)):
+                                part = report_parts[i]
+                                # Split by the closing code block marker
+                                if "```" in part:
+                                    mermaid_code, remaining_text = part.split("```", 1)
+                                    mermaid_code = mermaid_code.strip()
                                     
-                                    # 尝试渲染一个备用的简单图表
-                                    st.warning("尝试渲染备用图表...")
+                                    # 仅提供查看图表代码的选项
+                                    with st.expander("查看图表代码"):
+                                        st.code(mermaid_code, language="mermaid")
+                                    
+                                    # 尝试修复常见的语法错误
+                                    if "graph" in mermaid_code and "flowchart" not in mermaid_code:
+                                        # 旧版语法，转换为新版
+                                        mermaid_code = mermaid_code.replace("graph", "flowchart")
+                                    
                                     try:
-                                        fallback_code = """
+                                        # 使用优化过的渲染函数展示图表
+                                        render_mermaid(mermaid_code)
+                                    except Exception as e:
+                                        st.error(f"图表渲染失败: {str(e)}")
+                                        st.code(mermaid_code, language="mermaid")
+                                        
+                                        # 尝试渲染一个备用的简单图表
+                                        st.warning("尝试渲染备用图表...")
+                                        try:
+                                            fallback_code = """
 flowchart TD
     A[学习] --> B[实践]
     B --> C[就业]
-                                        """
-                                        render_mermaid(fallback_code)
-                                    except:
-                                        st.error("备用图表也渲染失败")
-                                
-                                # 显示图表之后的文本
-                                st.write(remaining_text)
-                            else:
-                                # No closing marker found, just display as text
-                                st.write(part)
-                    else:
-                        # 如果没有图表标记，直接显示报告
+                                            """
+                                            render_mermaid(fallback_code)
+                                        except:
+                                            st.error("备用图表也渲染失败")
+                                    
+                                    # 显示图表之后的文本
+                                    st.write(remaining_text)
+                                else:
+                                    # No closing marker found, just display as text
+                                    st.write(part)
+                        else:
+                            # 如果没有图表标记，直接显示报告
+                            st.write(st.session_state.final_report)
+                    except Exception as e:
+                        # 如果解析失败，直接显示完整报告
+                        st.error(f"处理图表时出错: {str(e)}")
                         st.write(st.session_state.final_report)
-                except Exception as e:
-                    # 如果解析失败，直接显示完整报告
-                    st.error(f"处理图表时出错: {str(e)}")
-                    st.write(st.session_state.final_report)
 
 # Tab 2: Agent Settings
 with tab2:
