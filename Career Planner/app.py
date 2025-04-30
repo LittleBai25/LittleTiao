@@ -199,10 +199,18 @@ def check_api_status():
             os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
             
             client = Client(api_key=langsmith_key)
-            # 测试与API的连接
-            projects = client.list_projects(limit=1)
-            st.session_state.api_status["langsmith"] = len(projects) >= 0
-            st.info(f"LangSmith连接成功: 发现 {len(projects)} 个项目")
+            # 测试与API的连接 - 修复generator问题
+            try:
+                # 将生成器转换为列表并检查是否能获取项目
+                projects = list(client.list_projects(limit=1))
+                st.session_state.api_status["langsmith"] = True
+                st.info(f"LangSmith连接成功: 发现 {len(projects)} 个项目")
+            except Exception as e:
+                # 如果列表转换失败，尝试直接检查连接
+                # 只要没有抛出异常，就认为连接成功
+                _ = client.get_project(project_name="default")
+                st.session_state.api_status["langsmith"] = True
+                st.info("LangSmith连接成功")
         else:
             st.session_state.api_status["langsmith"] = False
             st.warning("LangSmith API密钥未设置")
@@ -228,12 +236,18 @@ def init_langsmith():
         # 创建并返回客户端
         client = Client(api_key=langsmith_api_key)
         
-        # 测试连接
+        # 测试连接 - 修复generator问题
         try:
-            _ = client.list_projects(limit=1)
+            # 测试连接但不依赖于list_projects的返回类型
+            _ = client.get_project(project_name=langsmith_project)
             st.success(f"LangSmith连接成功，监控已启用（项目：{langsmith_project}）")
         except Exception as e:
-            st.error(f"LangSmith API连接测试失败: {str(e)}")
+            # 如果指定项目不存在，尝试获取默认项目
+            try:
+                _ = client.get_project(project_name="default")
+                st.success("LangSmith连接成功，但指定项目不存在，将使用默认项目")
+            except Exception as e2:
+                st.error(f"LangSmith API连接测试失败: {str(e2)}")
         
         return client
     except Exception as e:
