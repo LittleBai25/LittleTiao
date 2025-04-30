@@ -841,9 +841,27 @@ with tab1:
                                 # Clean mermaid code and render
                                 mermaid_code = mermaid_code.strip()
                                 
+                                # 检查session state是否有已保存的修改版本
+                                if f"current_mermaid_code_{i}" in st.session_state:
+                                    mermaid_code = st.session_state[f"current_mermaid_code_{i}"]
+                                    st.info("显示的是用户修改后的图表")
+                                
                                 # 为调试添加一个选项来显示原始mermaid代码
                                 with st.expander("查看图表代码"):
                                     st.code(mermaid_code, language="mermaid")
+                                
+                                # 添加图表编辑说明
+                                with st.expander("如何编辑图表?"):
+                                    st.markdown("""
+                                    ### 图表编辑说明
+                                    
+                                    1. **编辑代码**: 在下方"编辑图表代码"文本框中修改图表代码
+                                    2. **实时预览**: 勾选"实时预览"选项可立即查看修改效果
+                                    3. **保存修改**: 点击"更新图表"按钮保存您的修改
+                                    4. **恢复原始图表**: 如果出现问题，点击"重置图表"按钮恢复原始版本
+                                    
+                                    编辑图表代码时，请注意保持正确的语法格式。参考"Mermaid图表语法帮助"获取更多信息。
+                                    """)
                                 
                                 # 添加Mermaid语法帮助
                                 with st.expander("Mermaid图表语法帮助"):
@@ -877,12 +895,32 @@ with tab1:
                                     """)
                                 
                                 # 添加用户编辑图表的功能
+                                # 从会话状态获取当前代码（如果有）
+                                current_code = st.session_state.get(f"current_mermaid_code_{i}", mermaid_code)
+                                
                                 edited_mermaid_code = st.text_area(
                                     "编辑图表代码",
-                                    value=mermaid_code,
+                                    value=current_code,
                                     height=200,
                                     key=f"mermaid_editor_{i}"
                                 )
+                                
+                                # 添加实时预览选项
+                                show_live_preview = st.checkbox("实时预览", value=False, key=f"live_preview_{i}")
+                                if show_live_preview:
+                                    st.write("图表实时预览:")
+                                    try:
+                                        # 直接渲染编辑后的代码
+                                        render_mermaid(edited_mermaid_code)
+                                        st.info("这是预览效果，点击「更新图表」保存此版本")
+                                    except Exception as e:
+                                        st.error(f"预览渲染失败: {str(e)}")
+                                        st.markdown("""
+                                        **常见错误原因:**
+                                        - 语法错误
+                                        - 节点ID冲突
+                                        - 未闭合的括号或引号
+                                        """)
                                 
                                 # 创建按钮行
                                 col1, col2 = st.columns(2)
@@ -892,14 +930,24 @@ with tab1:
                                         # 保存原始代码以便重置
                                         if f"original_code_{i}" not in st.session_state:
                                             st.session_state[f"original_code_{i}"] = mermaid_code
+                                        # 更新代码为用户编辑的版本
                                         mermaid_code = edited_mermaid_code
+                                        # 更新session state以便在渲染时使用
+                                        st.session_state[f"current_mermaid_code_{i}"] = edited_mermaid_code
+                                        # 显示更新消息
+                                        st.success("图表代码已更新，即将重新渲染")
+                                        # 重新加载页面以应用更改
+                                        st.rerun()
                                 
                                 with col2:
                                     # 添加重置按钮
                                     if f"original_code_{i}" in st.session_state and st.button("重置图表", key=f"reset_chart_{i}"):
-                                        mermaid_code = st.session_state[f"original_code_{i}"]
-                                        edited_mermaid_code = mermaid_code
-                                        st.session_state[f"mermaid_editor_{i}"] = mermaid_code
+                                        # 恢复原始代码
+                                        original_code = st.session_state[f"original_code_{i}"]
+                                        # 更新session state
+                                        st.session_state[f"current_mermaid_code_{i}"] = original_code
+                                        # 清除编辑器中的内容，强制重新加载
+                                        st.session_state[f"mermaid_editor_{i}"] = original_code
                                         st.success("图表已重置为原始版本")
                                         # 需要rerun来重新加载text_area的值
                                         st.rerun()
@@ -920,6 +968,15 @@ with tab1:
                                 except Exception as e:
                                     st.error(f"图表渲染失败: {str(e)}")
                                     st.code(mermaid_code, language="mermaid")
+                                    
+                                    # 提供实时编辑预览功能
+                                    if st.checkbox("尝试直接渲染用户编辑的代码", key=f"direct_render_{i}"):
+                                        st.write("编辑后的图表预览:")
+                                        try:
+                                            render_mermaid(edited_mermaid_code)
+                                            st.success("预览渲染成功！点击「更新图表」保存此版本。")
+                                        except Exception as e2:
+                                            st.error(f"预览渲染失败: {str(e2)}")
                                     
                                     # 更详细的错误提示
                                     st.warning("常见的Mermaid语法错误包括：")
