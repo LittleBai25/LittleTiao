@@ -373,6 +373,7 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         
         # Track with LangSmith if available
         if langsmith_client:
+            # Create a run but don't use it as a context manager
             run_tree = RunTree(
                 name="career_planning_draft",
                 run_type="chain",
@@ -380,15 +381,16 @@ def generate_career_planning_draft(user_inputs, agent_settings):
                 client=langsmith_client
             )
             
-            with run_tree:
-                # Make API call through OpenRouter
-                response = call_openrouter(
-                    messages=messages, 
-                    model=model, 
-                    temperature=0.7
-                )
-                run_tree.end(outputs={"draft_report": response})
-                return response
+            # Make API call through OpenRouter
+            response = call_openrouter(
+                messages=messages, 
+                model=model, 
+                temperature=0.7
+            )
+            
+            # Record the end of the run
+            run_tree.end(outputs={"draft_report": response})
+            return response
         else:
             # Make API call without tracking
             return call_openrouter(
@@ -418,6 +420,7 @@ def generate_final_report(draft_report, agent_settings):
         
         # Track with LangSmith if available
         if langsmith_client:
+            # Create a run but don't use it as a context manager
             run_tree = RunTree(
                 name="final_report_generation",
                 run_type="chain",
@@ -425,15 +428,16 @@ def generate_final_report(draft_report, agent_settings):
                 client=langsmith_client
             )
             
-            with run_tree:
-                # Make API call through OpenRouter
-                response = call_openrouter(
-                    messages=messages, 
-                    model=model, 
-                    temperature=0.7
-                )
-                run_tree.end(outputs={"final_report": response})
-                return response
+            # Make API call through OpenRouter
+            response = call_openrouter(
+                messages=messages, 
+                model=model, 
+                temperature=0.7
+            )
+            
+            # Record the end of the run
+            run_tree.end(outputs={"final_report": response})
+            return response
         else:
             # Make API call without tracking
             return call_openrouter(
