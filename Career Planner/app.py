@@ -135,10 +135,23 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
         
         # For vision models, we might need additional parameters
         if is_vision:
-            # Additional vision-specific settings if needed
-            pass
+            # 为视觉请求添加额外配置
+            print(f"处理视觉请求，模型: {model}")
+            # 多模态模型可能需要额外参数，例如max_tokens
+            payload["max_tokens"] = 1024  # 视觉分析可能需要更长的输出
+            payload["top_p"] = 0.9  # 增加采样多样性
+            
+            # 记录多模态请求内容
+            content_types = []
+            for msg in safe_messages:
+                if "content" in msg and isinstance(msg["content"], list):
+                    for item in msg["content"]:
+                        if "type" in item:
+                            content_types.append(item["type"])
+            
+            print(f"多模态内容类型: {', '.join(content_types)}")
         
-        print(f"调用OpenRouter API - 模型: {model}, 温度: {temperature}")
+        print(f"调用OpenRouter API - 模型: {model}, 温度: {temperature}, 视觉模式: {is_vision}")
         
         # 发送API请求
         response = requests.post(
@@ -201,7 +214,8 @@ langsmith_enabled = init_langsmith()
 AVAILABLE_MODELS = {
     "qwen/qwen-max": "Qwen Max",
     "qwen/qwen3-32b:free": "Qwen 3 32B",
-    "deepseek/deepseek-chat-v3-0324:free": "DeepSeek Chat v3"
+    "deepseek/deepseek-chat-v3-0324:free": "DeepSeek Chat v3",
+    "qwen/qwen2.5-vl-72b-instruct": "Qwen 2.5 VL (视觉模型)"
 }
 
 # Session state initialization
@@ -424,10 +438,18 @@ def analyze_transcript_with_vision_model(image_bytes):
             }
         ]
         
+        # 使用固定的Qwen 2.5 VL模型并打印日志
+        vision_model = "qwen/qwen2.5-vl-72b-instruct"
+        print(f"开始使用视觉模型分析成绩单: {vision_model}")
+        
         # Use Qwen's vision model through OpenRouter
-        return call_openrouter(messages, "qwen/qwen2.5-vl-72b-instruct", temperature=0.3, is_vision=True)
+        result = call_openrouter(messages, vision_model, temperature=0.3, is_vision=True, run_name="成绩单视觉分析")
+        print(f"成绩单分析完成，返回{len(result)}字节的结果")
+        return result
     except Exception as e:
-        return f"Error during analysis: {str(e)}"
+        error_msg = f"Error during transcript analysis: {str(e)}"
+        print(error_msg)
+        return error_msg
 
 # Function to render Mermaid diagrams
 def render_mermaid(mermaid_code):
@@ -867,12 +889,15 @@ with tab1:
         image_bytes = uploaded_file.getvalue()
         
         # Call vision model to analyze the transcript
-        with st.spinner("Analyzing transcript..."):
+        with st.spinner("Analyzing transcript with Qwen 2.5 VL model..."):
             transcript_text = analyze_transcript_with_vision_model(image_bytes)
+            # 立即将分析结果保存到session_state中
+            st.session_state.user_inputs["transcript_text"] = transcript_text
         
         # Display the analysis result in an expandable section
         with st.expander("Transcript Analysis Result", expanded=True):
             st.write(transcript_text)
+            st.success("成绩单分析完成并已自动保存！")
     
     # Store user inputs in session state
     if st.button("Start Analysis"):
@@ -885,7 +910,7 @@ with tab1:
                 "major": major,
                 "target_industry": target_industry,
                 "target_position": target_position,
-                "transcript_text": transcript_text
+                "transcript_text": transcript_text or st.session_state.user_inputs.get("transcript_text", "")
             }
             
             # Generate career planning draft
