@@ -440,29 +440,68 @@ def render_mermaid(mermaid_code):
         mermaid_code = mermaid_code.replace("graph", "flowchart")
     
     html = f"""
-    <div class="mermaid">
-    {mermaid_code}
+    <div class="mermaid-container">
+        <div class="mermaid">
+        {mermaid_code}
+        </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script>
         mermaid.initialize({{ 
             startOnLoad: true,
-            theme: 'default',
+            theme: 'forest',
             securityLevel: 'loose',
-            logLevel: 'error'
-        }});
-        
-        // 添加错误处理
-        window.addEventListener('error', function(e) {{
-            if (e.message && e.message.includes('mermaid')) {{
-                document.querySelectorAll('.mermaid').forEach(function(el) {{
-                    if (el.innerHTML.trim() === '') {{
-                        el.innerHTML = '<div style="color:red;padding:10px;border:1px solid red;border-radius:5px;">图表渲染错误，请检查代码语法</div>';
-                    }}
-                }});
+            logLevel: 'error',
+            flowchart: {{
+                curve: 'basis',
+                nodeSpacing: 50,
+                rankSpacing: 70,
+                padding: 15,
+                htmlLabels: true
+            }},
+            themeVariables: {{
+                primaryColor: '#5D8AA8',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#5D8AA8',
+                lineColor: '#5D8AA8', 
+                secondaryColor: '#006100',
+                tertiaryColor: '#F8F8F8'
             }}
-        }}, true);
+        }});
     </script>
+    <style>
+    .mermaid-container {{
+        background-color: #F8F8F8;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        margin: 20px 0;
+    }}
+    .mermaid {{
+        font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    }}
+    .mermaid .node rect, 
+    .mermaid .node circle, 
+    .mermaid .node ellipse, 
+    .mermaid .node polygon, 
+    .mermaid .node path {{
+        stroke-width: 2px;
+    }}
+    .mermaid .edgePath .path {{
+        stroke-width: 2px;
+    }}
+    .mermaid .label {{
+        font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+        font-size: 16px;
+        font-weight: 500;
+    }}
+    .mermaid .edgeLabel {{
+        background-color: white;
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-size: 14px;
+    }}
+    </style>
     """
     components.html(html, height=500)
 
@@ -707,20 +746,30 @@ def generate_final_report(draft_report, agent_settings):
 
 请在适当的位置包含Mermaid图表。创建Mermaid图表时，请注意以下几点：
 1. 将图表代码包裹在```mermaid和```标签中
-2. 使用非常简单的Mermaid语法，避免复杂的功能
-3. 创建一个简单的职业路径流程图
-4. 图表中只使用基本节点和连接，不要使用复杂样式
-5. 避免在节点文字中使用特殊字符和标点符号
-6. 所有节点必须有连接，不能有孤立节点
+2. 图表要视觉上美观，使用flowchart语法
+3. 创建一个清晰的职业路径流程图，展示用户可能的职业发展历程
+4. 使用合适的节点形状来区分不同类型的内容，例如:
+   - 方框 [文本] 用于表示基本步骤
+   - 圆角框 (文本) 用于表示过程/阶段
+   - 圆形 ((文本)) 用于表示起点/终点
+   - 菱形 {文本} 用于表示决策点
+5. 节点之间的连接应清晰展示职业路径的流向
+6. 节点数量控制在5-8个之间，确保图表简洁明了
+7. 避免在节点文字中使用特殊字符和标点符号
+8. 所有节点必须有连接，不能有孤立节点
 
-非常简单的有效Mermaid代码示例：
+美观的Mermaid图表示例：
 ```mermaid
 flowchart TD
-    A[开始] --> B[学习]
-    B --> C[工作]
+    A[学习专业知识] --> B(实习机会)
+    B --> C{选择方向}
+    C -->|技术路线| D[初级工程师]
+    C -->|管理路线| E[项目助理]
+    D --> F[高级工程师]
+    E --> G[项目经理]
 ```
 
-注意：请确保使用最简单的语法创建图表，避免任何可能导致语法错误的复杂功能。
+注意：请确保创建视觉上美观且富有信息量的图表，这是报告的重要组成部分。
 所有内容请使用中文输出。
 """
         
@@ -838,119 +887,11 @@ with tab1:
                             # Split by the closing code block marker
                             if "```" in part:
                                 mermaid_code, remaining_text = part.split("```", 1)
-                                # Clean mermaid code and render
                                 mermaid_code = mermaid_code.strip()
                                 
-                                # 检查session state是否有已保存的修改版本
-                                if f"current_mermaid_code_{i}" in st.session_state:
-                                    mermaid_code = st.session_state[f"current_mermaid_code_{i}"]
-                                    st.info("显示的是用户修改后的图表")
-                                
-                                # 为调试添加一个选项来显示原始mermaid代码
+                                # 仅提供查看图表代码的选项
                                 with st.expander("查看图表代码"):
                                     st.code(mermaid_code, language="mermaid")
-                                
-                                # 添加图表编辑说明
-                                with st.expander("如何编辑图表?"):
-                                    st.markdown("""
-                                    ### 图表编辑说明
-                                    
-                                    1. **编辑代码**: 在下方"编辑图表代码"文本框中修改图表代码
-                                    2. **实时预览**: 勾选"实时预览"选项可立即查看修改效果
-                                    3. **保存修改**: 点击"更新图表"按钮保存您的修改
-                                    4. **恢复原始图表**: 如果出现问题，点击"重置图表"按钮恢复原始版本
-                                    
-                                    编辑图表代码时，请注意保持正确的语法格式。参考"Mermaid图表语法帮助"获取更多信息。
-                                    """)
-                                
-                                # 添加Mermaid语法帮助
-                                with st.expander("Mermaid图表语法帮助"):
-                                    st.markdown("""
-                                    ### Mermaid图表语法基础
-                                    
-                                    #### 基本流程图
-                                    ```
-                                    flowchart TD
-                                        A[开始] --> B[步骤2]
-                                        B --> C[结束]
-                                    ```
-                                    
-                                    #### 节点形状
-                                    - 方框: `A[文本]`
-                                    - 圆角框: `B(文本)`
-                                    - 圆形: `C((文本))`
-                                    - 菱形: `D{文本}`
-                                    
-                                    #### 连接线
-                                    - 箭头: `A --> B`
-                                    - 粗箭头: `A ==> B`
-                                    - 虚线: `A -.-> B`
-                                    - 无箭头: `A --- B`
-                                    
-                                    #### 方向
-                                    - TD: 从上到下
-                                    - LR: 从左到右
-                                    
-                                    查看更多语法: [Mermaid流程图文档](https://mermaid.js.org/syntax/flowchart.html)
-                                    """)
-                                
-                                # 添加用户编辑图表的功能
-                                # 从会话状态获取当前代码（如果有）
-                                current_code = st.session_state.get(f"current_mermaid_code_{i}", mermaid_code)
-                                
-                                edited_mermaid_code = st.text_area(
-                                    "编辑图表代码",
-                                    value=current_code,
-                                    height=200,
-                                    key=f"mermaid_editor_{i}"
-                                )
-                                
-                                # 添加实时预览选项
-                                show_live_preview = st.checkbox("实时预览", value=False, key=f"live_preview_{i}")
-                                if show_live_preview:
-                                    st.write("图表实时预览:")
-                                    try:
-                                        # 直接渲染编辑后的代码
-                                        render_mermaid(edited_mermaid_code)
-                                        st.info("这是预览效果，点击「更新图表」保存此版本")
-                                    except Exception as e:
-                                        st.error(f"预览渲染失败: {str(e)}")
-                                        st.markdown("""
-                                        **常见错误原因:**
-                                        - 语法错误
-                                        - 节点ID冲突
-                                        - 未闭合的括号或引号
-                                        """)
-                                
-                                # 创建按钮行
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    # 使用编辑后的代码渲染图表
-                                    if st.button("更新图表", key=f"update_chart_{i}"):
-                                        # 保存原始代码以便重置
-                                        if f"original_code_{i}" not in st.session_state:
-                                            st.session_state[f"original_code_{i}"] = mermaid_code
-                                        # 更新代码为用户编辑的版本
-                                        mermaid_code = edited_mermaid_code
-                                        # 更新session state以便在渲染时使用
-                                        st.session_state[f"current_mermaid_code_{i}"] = edited_mermaid_code
-                                        # 显示更新消息
-                                        st.success("图表代码已更新，即将重新渲染")
-                                        # 重新加载页面以应用更改
-                                        st.rerun()
-                                
-                                with col2:
-                                    # 添加重置按钮
-                                    if f"original_code_{i}" in st.session_state and st.button("重置图表", key=f"reset_chart_{i}"):
-                                        # 恢复原始代码
-                                        original_code = st.session_state[f"original_code_{i}"]
-                                        # 更新session state
-                                        st.session_state[f"current_mermaid_code_{i}"] = original_code
-                                        # 清除编辑器中的内容，强制重新加载
-                                        st.session_state[f"mermaid_editor_{i}"] = original_code
-                                        st.success("图表已重置为原始版本")
-                                        # 需要rerun来重新加载text_area的值
-                                        st.rerun()
                                 
                                 # 尝试修复常见的语法错误
                                 if "graph" in mermaid_code and "flowchart" not in mermaid_code:
@@ -958,34 +899,11 @@ with tab1:
                                     mermaid_code = mermaid_code.replace("graph", "flowchart")
                                 
                                 try:
-                                    # Render diagram with error handling
+                                    # 使用优化过的渲染函数展示图表
                                     render_mermaid(mermaid_code)
-                                    
-                                    # 显示成功消息（如果是编辑后的代码）
-                                    if mermaid_code == edited_mermaid_code and st.session_state.get(f"previous_code_{i}", "") != mermaid_code:
-                                        st.success("图表更新成功！")
-                                        st.session_state[f"previous_code_{i}"] = mermaid_code
                                 except Exception as e:
                                     st.error(f"图表渲染失败: {str(e)}")
                                     st.code(mermaid_code, language="mermaid")
-                                    
-                                    # 提供实时编辑预览功能
-                                    if st.checkbox("尝试直接渲染用户编辑的代码", key=f"direct_render_{i}"):
-                                        st.write("编辑后的图表预览:")
-                                        try:
-                                            render_mermaid(edited_mermaid_code)
-                                            st.success("预览渲染成功！点击「更新图表」保存此版本。")
-                                        except Exception as e2:
-                                            st.error(f"预览渲染失败: {str(e2)}")
-                                    
-                                    # 更详细的错误提示
-                                    st.warning("常见的Mermaid语法错误包括：")
-                                    st.markdown("""
-                                    - 节点ID中使用了特殊字符
-                                    - 箭头方向定义错误（应使用 --> 或 ==> 等）
-                                    - 节点缺少标签文本 [标签文本]
-                                    - 图表类型拼写错误（应为flowchart而非flowchar等）
-                                    """)
                                     
                                     # 尝试渲染一个备用的简单图表
                                     st.warning("尝试渲染备用图表...")
@@ -999,7 +917,7 @@ flowchart TD
                                     except:
                                         st.error("备用图表也渲染失败")
                                 
-                                # Display the text that follows
+                                # 显示图表之后的文本
                                 st.write(remaining_text)
                             else:
                                 # No closing marker found, just display as text
