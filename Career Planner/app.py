@@ -100,8 +100,7 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
         "temperature": str(temperature), 
         "is_vision": str(is_vision),
         "messages_count": str(len(messages)),
-        "model_provider": "OpenRouter",
-        "description": f"AI模型: {model}, 请求: {run_name}"
+        "model_provider": "OpenRouter"
     }
     
     try:
@@ -112,13 +111,25 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://career-planner.streamlit.app",
-            "X-Model-Description": f"AI模型: {model}, 温度: {temperature}"  # 添加自定义标头
+            "HTTP-Referer": "https://career-planner.streamlit.app"
         }
+        
+        # 创建JSON安全的消息复制版本
+        safe_messages = []
+        for msg in messages:
+            safe_msg = {}
+            for key, value in msg.items():
+                if isinstance(value, str):
+                    # 仅复制字符串值，不做特殊处理
+                    safe_msg[key] = value
+                else:
+                    # 非字符串值直接复制
+                    safe_msg[key] = value
+            safe_messages.append(safe_msg)
         
         payload = {
             "model": model,
-            "messages": messages,
+            "messages": safe_messages,
             "temperature": temperature
         }
         
@@ -792,60 +803,9 @@ with tab1:
             # Display the final report
             st.subheader("Final Career Planning Report")
             
-            # 提供不同格式的下载选项
+            # 显示报告内容
             if st.session_state.final_report:
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # 使用Streamlit内置的下载按钮 - 纯文本格式
-                    st.download_button(
-                        label="下载为TXT格式",
-                        data=st.session_state.final_report,
-                        file_name="职业规划报告.txt",
-                        mime="text/plain",
-                        help="下载纯文本格式的职业规划报告"
-                    )
-                
-                with col2:
-                    # 使用HTML格式导出
-                    html_content = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>职业规划报告</title>
-                        <style>
-                            body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: 0 auto; }}
-                            h1, h2, h3 {{ color: #333; }}
-                            .date {{ color: #666; font-style: italic; margin-bottom: 20px; }}
-                            .content {{ margin-top: 20px; }}
-                            pre {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }}
-                            .mermaid-note {{ background-color: #fffde7; padding: 10px; border-left: 4px solid #ffd600; margin: 15px 0; }}
-                        </style>
-                    </head>
-                    <body>
-                        <h1>职业规划报告</h1>
-                        <div class="date">生成时间: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-                        <div class="content">
-                            {st.session_state.final_report.replace('```mermaid', '<pre class="mermaid-code">').replace('```', '</pre><div class="mermaid-note">注意：此处应有图表，请在应用中查看完整图表。</div>')}
-                        </div>
-                    </body>
-                    </html>
-                    """
-                    
-                    # 提供HTML下载
-                    st.download_button(
-                        label="下载为HTML格式",
-                        data=html_content,
-                        file_name="职业规划报告.html",
-                        mime="text/html",
-                        help="下载HTML格式的职业规划报告，可在浏览器中查看"
-                    )
-                
-                st.markdown("---")
-                
-                # 显示报告内容
+                # 更新处理图表的方式，添加更多健壮性
                 try:
                     # 检查是否包含Mermaid图表
                     if "```mermaid" in st.session_state.final_report:
