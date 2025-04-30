@@ -17,7 +17,6 @@ import tempfile
 import streamlit.components.v1 as components
 import datetime
 from io import BytesIO
-from docx import Document
 
 # 初始化全局变量用于记录模型信息
 _run_metadata = {}
@@ -183,12 +182,6 @@ def init_langsmith():
     except Exception as e:
         st.error(f"Error initializing LangSmith: {str(e)}")
         return False
-
-# 提供纯文本下载选项的函数
-def get_text_file_downloader_html(text, file_label, file_name):
-    bin_str = base64.b64encode(text.encode()).decode()
-    href = f'<a href="data:text/plain;base64,{bin_str}" download="{file_name}">点击下载 {file_label}</a>'
-    return href 
 
 # 初始化LangSmith
 langsmith_enabled = init_langsmith()
@@ -799,86 +792,119 @@ with tab1:
             # Display the final report
             st.subheader("Final Career Planning Report")
             
-            # 生成Word文档并提供下载链接
+            # 提供不同格式的下载选项
             if st.session_state.final_report:
-                # 同时生成Word文档和纯文本下载选项
-                doc_io = generate_word_document("职业规划报告", st.session_state.final_report)
-                if doc_io:
-                    st.markdown(
-                        get_binary_file_downloader_html(doc_io, "职业规划报告.docx", "Career_Planning_Report.docx"),
-                        unsafe_allow_html=True
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # 使用Streamlit内置的下载按钮 - 纯文本格式
+                    st.download_button(
+                        label="下载为TXT格式",
+                        data=st.session_state.final_report,
+                        file_name="职业规划报告.txt",
+                        mime="text/plain",
+                        help="下载纯文本格式的职业规划报告"
                     )
                 
-                # 也提供纯文本下载选项作为备选
-                text_btn = st.download_button(
-                    label="下载纯文本报告 (TXT)",
-                    data=st.session_state.final_report,
-                    file_name="Career_Planning_Report.txt",
-                    mime="text/plain"
-                )
-            
-            st.markdown("---")
-            
-            # 更新处理图表的方式，添加更多健壮性
-            try:
-                # 检查是否包含Mermaid图表
-                if "```mermaid" in st.session_state.final_report:
-                    # Process and display text and Mermaid diagrams separately
-                    report_parts = st.session_state.final_report.split("```mermaid")
+                with col2:
+                    # 使用HTML格式导出
+                    html_content = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>职业规划报告</title>
+                        <style>
+                            body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: 0 auto; }}
+                            h1, h2, h3 {{ color: #333; }}
+                            .date {{ color: #666; font-style: italic; margin-bottom: 20px; }}
+                            .content {{ margin-top: 20px; }}
+                            pre {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }}
+                            .mermaid-note {{ background-color: #fffde7; padding: 10px; border-left: 4px solid #ffd600; margin: 15px 0; }}
+                        </style>
+                    </head>
+                    <body>
+                        <h1>职业规划报告</h1>
+                        <div class="date">生成时间: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+                        <div class="content">
+                            {st.session_state.final_report.replace('```mermaid', '<pre class="mermaid-code">').replace('```', '</pre><div class="mermaid-note">注意：此处应有图表，请在应用中查看完整图表。</div>')}
+                        </div>
+                    </body>
+                    </html>
+                    """
                     
-                    # Display the first text part
-                    if report_parts and len(report_parts) > 0:
-                        st.write(report_parts[0])
-                    
-                    # Process each mermaid diagram and following text
-                    for i in range(1, len(report_parts)):
-                        part = report_parts[i]
-                        # Split by the closing code block marker
-                        if "```" in part:
-                            mermaid_code, remaining_text = part.split("```", 1)
-                            # Clean mermaid code and render
-                            mermaid_code = mermaid_code.strip()
-                            
-                            # 为调试添加一个选项来显示原始mermaid代码
-                            with st.expander("查看图表代码"):
-                                st.code(mermaid_code, language="mermaid")
-                            
-                            # 尝试修复常见的语法错误
-                            if "graph" in mermaid_code and "flowchart" not in mermaid_code:
-                                # 旧版语法，转换为新版
-                                mermaid_code = mermaid_code.replace("graph", "flowchart")
-                            
-                            try:
-                                # Render diagram with error handling
-                                render_mermaid(mermaid_code)
-                            except Exception as e:
-                                st.error(f"图表渲染失败: {str(e)}")
-                                st.code(mermaid_code, language="mermaid")
+                    # 提供HTML下载
+                    st.download_button(
+                        label="下载为HTML格式",
+                        data=html_content,
+                        file_name="职业规划报告.html",
+                        mime="text/html",
+                        help="下载HTML格式的职业规划报告，可在浏览器中查看"
+                    )
+                
+                st.markdown("---")
+                
+                # 显示报告内容
+                try:
+                    # 检查是否包含Mermaid图表
+                    if "```mermaid" in st.session_state.final_report:
+                        # Process and display text and Mermaid diagrams separately
+                        report_parts = st.session_state.final_report.split("```mermaid")
+                        
+                        # Display the first text part
+                        if report_parts and len(report_parts) > 0:
+                            st.write(report_parts[0])
+                        
+                        # Process each mermaid diagram and following text
+                        for i in range(1, len(report_parts)):
+                            part = report_parts[i]
+                            # Split by the closing code block marker
+                            if "```" in part:
+                                mermaid_code, remaining_text = part.split("```", 1)
+                                # Clean mermaid code and render
+                                mermaid_code = mermaid_code.strip()
                                 
-                                # 尝试渲染一个备用的简单图表
-                                st.warning("尝试渲染备用图表...")
+                                # 为调试添加一个选项来显示原始mermaid代码
+                                with st.expander("查看图表代码"):
+                                    st.code(mermaid_code, language="mermaid")
+                                
+                                # 尝试修复常见的语法错误
+                                if "graph" in mermaid_code and "flowchart" not in mermaid_code:
+                                    # 旧版语法，转换为新版
+                                    mermaid_code = mermaid_code.replace("graph", "flowchart")
+                                
                                 try:
-                                    fallback_code = """
+                                    # Render diagram with error handling
+                                    render_mermaid(mermaid_code)
+                                except Exception as e:
+                                    st.error(f"图表渲染失败: {str(e)}")
+                                    st.code(mermaid_code, language="mermaid")
+                                    
+                                    # 尝试渲染一个备用的简单图表
+                                    st.warning("尝试渲染备用图表...")
+                                    try:
+                                        fallback_code = """
 flowchart TD
     A[学习] --> B[实践]
     B --> C[就业]
-                                    """
-                                    render_mermaid(fallback_code)
-                                except:
-                                    st.error("备用图表也渲染失败")
-                            
-                            # Display the text that follows
-                            st.write(remaining_text)
-                        else:
-                            # No closing marker found, just display as text
-                            st.write(part)
-                else:
-                    # 如果没有图表标记，直接显示报告
+                                        """
+                                        render_mermaid(fallback_code)
+                                    except:
+                                        st.error("备用图表也渲染失败")
+                                
+                                # Display the text that follows
+                                st.write(remaining_text)
+                            else:
+                                # No closing marker found, just display as text
+                                st.write(part)
+                    else:
+                        # 如果没有图表标记，直接显示报告
+                        st.write(st.session_state.final_report)
+                except Exception as e:
+                    # 如果解析失败，直接显示完整报告
+                    st.error(f"处理图表时出错: {str(e)}")
                     st.write(st.session_state.final_report)
-            except Exception as e:
-                # 如果解析失败，直接显示完整报告
-                st.error(f"处理图表时出错: {str(e)}")
-                st.write(st.session_state.final_report)
 
 # Tab 2: Agent Settings
 with tab2:
@@ -961,67 +987,3 @@ with tab3:
         with st.spinner("正在检查API状态..."):
             check_api_status()
         st.rerun()
-
-# 添加一个函数来生成Word文档
-def generate_word_document(title, content):
-    try:
-        doc = Document()
-        doc.add_heading(title, 0)
-        
-        # 添加生成时间
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        doc.add_paragraph(f"生成时间: {current_time}")
-        
-        # 添加内容 - 处理Mermaid图表
-        if "```mermaid" in content:
-            parts = content.split("```mermaid")
-            
-            # 添加第一部分文本
-            if parts[0].strip():
-                for paragraph in parts[0].strip().split('\n\n'):
-                    if paragraph.strip():
-                        doc.add_paragraph(paragraph.strip())
-            
-            # 处理每个图表及其后面的文本
-            for i in range(1, len(parts)):
-                part = parts[i]
-                if "```" in part:
-                    mermaid_code, remaining_text = part.split("```", 1)
-                    
-                    # 添加图表说明
-                    doc.add_heading("职业路径图表", level=1)
-                    doc.add_paragraph("注意: 由于Word文档限制，图表无法显示。请在Web应用中查看完整图表。")
-                    doc.add_paragraph(f"图表代码: {mermaid_code.strip()}", style='Quote')
-                    
-                    # 添加剩余文本
-                    if remaining_text.strip():
-                        for paragraph in remaining_text.strip().split('\n\n'):
-                            if paragraph.strip():
-                                doc.add_paragraph(paragraph.strip())
-                else:
-                    # 如果没有闭合的```，则添加为普通文本
-                    if part.strip():
-                        for paragraph in part.strip().split('\n\n'):
-                            if paragraph.strip():
-                                doc.add_paragraph(paragraph.strip())
-        else:
-            # 没有图表，直接添加全部内容
-            for paragraph in content.split('\n\n'):
-                if paragraph.strip():
-                    doc.add_paragraph(paragraph.strip())
-        
-        # 保存到内存中
-        docx_io = BytesIO()
-        doc.save(docx_io)
-        docx_io.seek(0)
-        
-        return docx_io
-    except Exception as e:
-        st.error(f"生成Word文档时出错: {str(e)}")
-        return None
-
-# 提供下载链接的函数
-def get_binary_file_downloader_html(bin_file, file_label, file_name):
-    bin_str = base64.b64encode(bin_file.read()).decode()
-    href = f'<a href="data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{bin_str}" download="{file_name}">点击下载 {file_label}</a>'
-    return href 
