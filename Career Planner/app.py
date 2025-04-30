@@ -12,7 +12,6 @@ from langchain_core.tools import Tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langsmith import Client
-from langsmith.run_trees import RunTree
 from langsmith.run_helpers import traceable
 import tempfile
 import streamlit.components.v1 as components
