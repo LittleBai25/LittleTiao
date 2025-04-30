@@ -16,6 +16,8 @@ from langsmith.run_helpers import traceable
 import tempfile
 import streamlit.components.v1 as components
 import datetime
+from docx import Document
+from io import BytesIO
 
 # Load environment variables
 load_dotenv()
@@ -196,7 +198,9 @@ class KnowledgeDatabase:
     def __init__(self):
         # Load data from CSV file
         try:
+            print(f"尝试加载CSV知识库: 模拟数据库.csv")
             self.df = pd.read_csv("模拟数据库.csv")
+            print(f"成功加载CSV，共有{len(self.df)}行数据")
             self.industries = {}
             self.majors = {}
             
@@ -252,9 +256,14 @@ class KnowledgeDatabase:
                     "career_paths": f"可从初级职位发展到高级职位，如{', '.join(relevant_positions[:3]) if len(relevant_positions) >= 3 else ', '.join(relevant_positions)}"
                 }
                 
-            print(f"Successfully loaded data from CSV: {len(self.industries)} industries, {len(self.majors)} majors")
+            print(f"知识库初始化完成: {len(self.industries)}个行业, {len(self.majors)}个专业领域")
+            for industry in self.industries.keys():
+                print(f"  - 行业: {industry}, 职位数: {len(self.industries[industry]['positions'])}")
+            for major in list(self.majors.keys())[:5]:  # 仅显示前5个专业
+                print(f"  - 专业领域: {major}")
+                
         except Exception as e:
-            print(f"Error loading CSV data: {str(e)}")
+            print(f"加载CSV数据失败: {str(e)}")
             # Fallback to demo data
             self.initialize_demo_data()
     
@@ -393,13 +402,16 @@ def render_mermaid(mermaid_code):
     components.html(html, height=500)
 
 # Function to query knowledge database
+@traceable(run_type="chain", name="知识库查询")
 def query_knowledge_db(user_inputs):
+    print(f"查询知识库: 专业={user_inputs['major']}, 行业={user_inputs['target_industry']}, 职位={user_inputs['target_position']}")
     results = []
     
     # Query by industry
     if user_inputs['target_industry']:
         industry_data = knowledge_db.query('industry', user_inputs['target_industry'])
         if industry_data:
+            print(f"找到行业信息: {user_inputs['target_industry']}, 包含{len(industry_data['positions'])}个职位")
             results.append(f"行业概览 - {user_inputs['target_industry']}:\n{industry_data['overview']}")
             
             # If position is specified, find specific position data
@@ -408,6 +420,7 @@ def query_knowledge_db(user_inputs):
                 for position in industry_data['positions']:
                     if position['name'] == user_inputs['target_position']:
                         found = True
+                        print(f"找到职位信息: {position['name']}, 技能: {position['skills']}")
                         # Check if we have new fields in our updated model
                         if 'skill_description' in position:
                             results.append(f"职位详情 - {position['name']}:\n"
@@ -426,6 +439,7 @@ def query_knowledge_db(user_inputs):
                         break
                 
                 if not found:
+                    print(f"未找到职位: {user_inputs['target_position']}")
                     results.append(f"在{user_inputs['target_industry']}行业中未找到{user_inputs['target_position']}职位的详细信息。")
                     # List similar positions as alternatives
                     results.append(f"{user_inputs['target_industry']}行业中的其他职位:")
@@ -443,16 +457,19 @@ def query_knowledge_db(user_inputs):
     if user_inputs['major']:
         major_data = knowledge_db.query('major', user_inputs['major'])
         if major_data:
+            print(f"找到专业信息: {user_inputs['major']}, 适合行业: {major_data['suitable_industries']}")
             results.append(f"{user_inputs['major']}专业的职业方向:\n"
                           f"适合的行业: {', '.join(major_data['suitable_industries'])}\n"
                           f"适合的职位: {', '.join(major_data['suitable_positions'])}\n"
                           f"核心技能: {major_data['core_skills']}\n"
                           f"职业发展路径: {major_data['career_paths']}")
         else:
+            print(f"未找到专业的精确匹配: {user_inputs['major']}, 尝试模糊匹配")
             # Try fuzzy match with knowledge areas
             found = False
             for major_name, major_info in knowledge_db.majors.items():
                 if user_inputs['major'] in major_name or major_name in user_inputs['major']:
+                    print(f"找到相关专业: {major_name}")
                     results.append(f"未找到完全匹配的专业，但找到相关专业 {major_name}:\n"
                                  f"适合的行业: {', '.join(major_info['suitable_industries'])}\n"
                                  f"适合的职位: {', '.join(major_info['suitable_positions'])}\n"
@@ -473,6 +490,7 @@ def query_knowledge_db(user_inputs):
             for position in industry_data['positions']:
                 if position['name'] == user_inputs['target_position']:
                     position_found = True
+                    print(f"找到职位信息(不指定行业): {position['name']} in {industry}")
                     results.append(f"职位详情 - {position['name']} (在{industry}行业中):\n"
                                   f"所需技能: {position['skills']}\n"
                                   f"技能详细描述: {position.get('skill_description', '无相关描述')}\n"
@@ -485,6 +503,7 @@ def query_knowledge_db(user_inputs):
                 break
         
         if not position_found:
+            print(f"未找到职位(不指定行业): {user_inputs['target_position']}")
             results.append(f"未找到{user_inputs['target_position']}职位的详细信息。")
             # Try to suggest similar positions
             similar_positions = []
@@ -500,6 +519,7 @@ def query_knowledge_db(user_inputs):
     
     # If no specific queries matched, provide general industry overview
     if not results:
+        print("未找到任何相关信息，提供通用概览")
         results.append("知识库中未找到与您的查询直接匹配的信息。")
         results.append("可用的行业信息:")
         for industry in knowledge_db.industries.keys():
@@ -509,7 +529,9 @@ def query_knowledge_db(user_inputs):
         for major in knowledge_db.majors.keys():
             results.append(f"- {major}")
     
-    return "\n\n".join(results)
+    response = "\n\n".join(results)
+    print(f"知识库查询完成，返回{len(response)}字节的信息")
+    return response
 
 # 使用 @traceable 装饰器追踪生成职业规划草稿的过程
 @traceable(run_type="chain", name="职业规划草稿生成")
@@ -688,9 +710,9 @@ with tab1:
                 )
                 st.session_state.draft_report = draft_report
             
-            # Display the draft report
-            st.subheader("Career Planning Report Draft")
-            st.write(st.session_state.draft_report)
+            # Display the draft report in a collapsible section
+            with st.expander("Career Planning Report Draft", expanded=False):
+                st.write(st.session_state.draft_report)
             
             # Generate final report
             with st.spinner("Generating final career planning report..."):
@@ -702,6 +724,15 @@ with tab1:
             
             # Display the final report
             st.subheader("Final Career Planning Report")
+            
+            # 生成Word文档并提供下载链接
+            if st.session_state.final_report:
+                doc_io = generate_word_document("职业规划报告", st.session_state.final_report)
+                st.markdown(
+                    get_binary_file_downloader_html(doc_io, "职业规划报告.docx", "Career_Planning_Report.docx"),
+                    unsafe_allow_html=True
+                )
+                st.markdown("---")
             
             # 更新处理图表的方式，添加更多健壮性
             try:
@@ -844,4 +875,64 @@ with tab3:
     if st.button("刷新状态"):
         with st.spinner("正在检查API状态..."):
             check_api_status()
-        st.rerun() 
+        st.rerun()
+
+# 添加一个函数来生成可下载的Word文档
+def generate_word_document(title, content):
+    doc = Document()
+    doc.add_heading(title, 0)
+    
+    # 添加生成时间
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    doc.add_paragraph(f"生成时间: {current_time}")
+    
+    # 添加内容 - 处理Mermaid图表
+    if "```mermaid" in content:
+        parts = content.split("```mermaid")
+        
+        # 添加第一部分文本
+        if parts[0].strip():
+            for paragraph in parts[0].strip().split('\n\n'):
+                if paragraph.strip():
+                    doc.add_paragraph(paragraph.strip())
+        
+        # 处理每个图表及其后面的文本
+        for i in range(1, len(parts)):
+            part = parts[i]
+            if "```" in part:
+                mermaid_code, remaining_text = part.split("```", 1)
+                
+                # 添加图表说明
+                doc.add_heading("职业路径图表", level=1)
+                doc.add_paragraph("注意: 由于Word文档限制，图表无法显示。请在Web应用中查看完整图表。")
+                doc.add_paragraph(f"图表代码: {mermaid_code.strip()}", style='Quote')
+                
+                # 添加剩余文本
+                if remaining_text.strip():
+                    for paragraph in remaining_text.strip().split('\n\n'):
+                        if paragraph.strip():
+                            doc.add_paragraph(paragraph.strip())
+            else:
+                # 如果没有闭合的```，则添加为普通文本
+                if part.strip():
+                    for paragraph in part.strip().split('\n\n'):
+                        if paragraph.strip():
+                            doc.add_paragraph(paragraph.strip())
+    else:
+        # 没有图表，直接添加全部内容
+        for paragraph in content.split('\n\n'):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph.strip())
+    
+    # 保存到内存中
+    docx_io = BytesIO()
+    doc.save(docx_io)
+    docx_io.seek(0)
+    
+    return docx_io
+
+# 提供下载链接的函数
+def get_binary_file_downloader_html(bin_file, file_label, file_name):
+    bin_str = base64.b64encode(bin_file.read()).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{bin_str}" download="{file_name}">点击下载 {file_label}</a>'
+    return href 
