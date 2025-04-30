@@ -437,44 +437,44 @@ def generate_final_report(draft_report, agent_settings):
         output_format = agent_settings["output_format"]
         model = agent_settings["model"]
         
-        # 更新系统提示，提供更明确的Mermaid语法指导
+        # 更新系统提示，提供更明确的Mermaid语法指导（改为中文）
         system_prompt = f"""{role}
 
 {task}
 
-Output Format Requirements:
+输出格式要求:
 {output_format}
 
-Please include Mermaid diagrams at appropriate places. When creating Mermaid diagrams:
-1. Wrap them in ```mermaid and ``` tags
-2. Use valid Mermaid syntax 
-3. Create at least one diagram showing the career path (use flowchart or mindmap)
-4. Create one timeline diagram showing recommended actions
-5. Keep diagrams simple and ensure they follow Mermaid syntax rules
-6. Test your syntax before including it
+请在适当的位置包含Mermaid图表。创建Mermaid图表时，请注意以下几点：
+1. 将图表代码包裹在```mermaid和```标签中
+2. 使用有效的Mermaid语法
+3. 至少创建一个展示职业发展路径的图表（使用流程图flowchart或思维导图mindmap）
+4. 创建一个展示推荐行动的时间线图表
+5. 保持图表简洁，确保遵循Mermaid语法规则
+6. 在包含图表前检查语法
 
-Example of valid Mermaid code:
+有效Mermaid代码示例：
 ```mermaid
 flowchart TD
-    A[Start] --> B[Process]
-    B --> C[End]
+    A[开始] --> B[过程]
+    B --> C[结束]
 ```
 
-Another example:
+另一个示例：
 ```mermaid
 mindmap
-  root((Career))
-    Path 1
-      Skill A
-      Skill B
-    Path 2
-      Skill C
+  root((职业))
+    路径1
+      技能A
+      技能B
+    路径2
+      技能C
 ```
 """
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Here is the career planning report draft:\n\n{draft_report}\n\nBased on this draft, please supplement with relevant information and create a complete report with text and diagrams."}
+            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和图表的完整报告。"}
         ]
         
         # Track with LangSmith if available
