@@ -291,13 +291,21 @@ def analyze_transcript_with_vision_model(image_bytes):
 
 # Function to render Mermaid diagrams
 def render_mermaid(mermaid_code):
+    # 清理可能包含的空格或特殊字符
+    mermaid_code = mermaid_code.strip()
+    
     html = f"""
     <div class="mermaid">
     {mermaid_code}
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script>
-        mermaid.initialize({{ startOnLoad: true }});
+        mermaid.initialize({{ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+            logLevel: 'error'
+        }});
     </script>
     """
     components.html(html, height=500)
@@ -429,8 +437,43 @@ def generate_final_report(draft_report, agent_settings):
         output_format = agent_settings["output_format"]
         model = agent_settings["model"]
         
+        # 更新系统提示，提供更明确的Mermaid语法指导
+        system_prompt = f"""{role}
+
+{task}
+
+Output Format Requirements:
+{output_format}
+
+Please include Mermaid diagrams at appropriate places. When creating Mermaid diagrams:
+1. Wrap them in ```mermaid and ``` tags
+2. Use valid Mermaid syntax 
+3. Create at least one diagram showing the career path (use flowchart or mindmap)
+4. Create one timeline diagram showing recommended actions
+5. Keep diagrams simple and ensure they follow Mermaid syntax rules
+6. Test your syntax before including it
+
+Example of valid Mermaid code:
+```mermaid
+flowchart TD
+    A[Start] --> B[Process]
+    B --> C[End]
+```
+
+Another example:
+```mermaid
+mindmap
+  root((Career))
+    Path 1
+      Skill A
+      Skill B
+    Path 2
+      Skill C
+```
+"""
+        
         messages = [
-            {"role": "system", "content": f"{role}\n\n{task}\n\nOutput Format Requirements:\n{output_format}\n\nPlease include Mermaid diagrams at appropriate places, wrapped in ```mermaid and ``` tags. Create at least one mind map diagram of the career path and one flowchart or timeline of recommended actions."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Here is the career planning report draft:\n\n{draft_report}\n\nBased on this draft, please supplement with relevant information and create a complete report with text and diagrams."}
         ]
         
@@ -543,25 +586,44 @@ with tab1:
             # Display the final report
             st.subheader("Final Career Planning Report")
             
-            # Process and display text and Mermaid diagrams separately
-            report_parts = st.session_state.final_report.split("```mermaid")
-            
-            for i, part in enumerate(report_parts):
-                if i == 0:
-                    # First part is just text
-                    st.write(part)
-                else:
-                    # Subsequent parts contain mermaid code followed by text
-                    code_and_text = part.split("```", 1)
-                    if len(code_and_text) == 2:
-                        mermaid_code = code_and_text[0]
-                        text = code_and_text[1]
+            # 更新处理图表的方式
+            try:
+                # Process and display text and Mermaid diagrams separately
+                report_parts = st.session_state.final_report.split("```mermaid")
+                
+                # Display the first text part
+                if report_parts and len(report_parts) > 0:
+                    st.write(report_parts[0])
+                
+                # Process each mermaid diagram and following text
+                for i in range(1, len(report_parts)):
+                    part = report_parts[i]
+                    # Split by the closing code block marker
+                    if "```" in part:
+                        mermaid_code, remaining_text = part.split("```", 1)
+                        # Clean mermaid code and render
+                        mermaid_code = mermaid_code.strip()
                         
-                        # Render the Mermaid diagram
-                        render_mermaid(mermaid_code)
+                        # 为调试添加一个选项来显示原始mermaid代码
+                        with st.expander("View Diagram Code"):
+                            st.code(mermaid_code, language="mermaid")
+                        
+                        try:
+                            # Render diagram with error handling
+                            render_mermaid(mermaid_code)
+                        except Exception as e:
+                            st.error(f"Failed to render diagram: {str(e)}")
+                            st.code(mermaid_code, language="mermaid")
                         
                         # Display the text that follows
-                        st.write(text)
+                        st.write(remaining_text)
+                    else:
+                        # No closing marker found, just display as text
+                        st.write(part)
+            except Exception as e:
+                # 如果解析失败，直接显示完整报告
+                st.error(f"Error processing diagrams: {str(e)}")
+                st.write(st.session_state.final_report)
 
 # Tab 2: Agent Settings
 with tab2:
