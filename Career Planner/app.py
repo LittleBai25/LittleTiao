@@ -198,19 +198,25 @@ def check_api_status():
             os.environ["LANGCHAIN_TRACING_V2"] = "true"
             os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
             
+            # 创建客户端并测试连接
             client = Client(api_key=langsmith_key)
-            # 测试与API的连接 - 修复generator问题
+            
+            # 简单地使用API调用来验证连接，不使用get_project方法
             try:
-                # 将生成器转换为列表并检查是否能获取项目
-                projects = list(client.list_projects(limit=1))
+                # 尝试创建一个简单的运行来测试API连接
+                run_tree = RunTree(
+                    name="test_connection",
+                    run_type="chain",
+                    inputs={"test": "connection"},
+                    client=client
+                )
+                run_tree.post()
+                run_tree.end(outputs={"result": "success"})
                 st.session_state.api_status["langsmith"] = True
-                st.info(f"LangSmith连接成功: 发现 {len(projects)} 个项目")
-            except Exception as e:
-                # 如果列表转换失败，尝试直接检查连接
-                # 只要没有抛出异常，就认为连接成功
-                _ = client.get_project(project_name="default")
-                st.session_state.api_status["langsmith"] = True
-                st.info("LangSmith连接成功")
+                st.info("LangSmith API连接成功")
+            except Exception as inner_e:
+                st.error(f"LangSmith API连接测试失败: {str(inner_e)}")
+                st.session_state.api_status["langsmith"] = False
         else:
             st.session_state.api_status["langsmith"] = False
             st.warning("LangSmith API密钥未设置")
@@ -236,18 +242,20 @@ def init_langsmith():
         # 创建并返回客户端
         client = Client(api_key=langsmith_api_key)
         
-        # 测试连接 - 修复generator问题
+        # 简单测试连接而不使用get_project方法
         try:
-            # 测试连接但不依赖于list_projects的返回类型
-            _ = client.get_project(project_name=langsmith_project)
+            # 创建一个简单的运行来测试API连接
+            run_tree = RunTree(
+                name="test_connection",
+                run_type="chain",
+                inputs={"test": "connection"},
+                client=client
+            )
+            run_tree.post()
+            run_tree.end(outputs={"result": "success"})
             st.success(f"LangSmith连接成功，监控已启用（项目：{langsmith_project}）")
         except Exception as e:
-            # 如果指定项目不存在，尝试获取默认项目
-            try:
-                _ = client.get_project(project_name="default")
-                st.success("LangSmith连接成功，但指定项目不存在，将使用默认项目")
-            except Exception as e2:
-                st.error(f"LangSmith API连接测试失败: {str(e2)}")
+            st.error(f"LangSmith API连接测试失败: {str(e)}")
         
         return client
     except Exception as e:
@@ -503,7 +511,7 @@ def generate_final_report(draft_report, agent_settings):
         output_format = agent_settings["output_format"]
         model = agent_settings["model"]
         
-        # 更新系统提示，提供更明确的Mermaid语法指导（改为中文）
+        # 更新系统提示，提供更简单的Mermaid图表示例和更严格的语法要求
         system_prompt = f"""{role}
 
 {task}
@@ -513,34 +521,25 @@ def generate_final_report(draft_report, agent_settings):
 
 请在适当的位置包含Mermaid图表。创建Mermaid图表时，请注意以下几点：
 1. 将图表代码包裹在```mermaid和```标签中
-2. 使用有效的Mermaid语法
-3. 至少创建一个展示职业发展路径的图表（使用流程图flowchart或思维导图mindmap）
-4. 创建一个展示推荐行动的时间线图表
-5. 保持图表简洁，确保遵循Mermaid语法规则
-6. 在包含图表前检查语法
+2. 使用非常简单的Mermaid语法，避免复杂的功能
+3. 创建一个简单的职业路径流程图
+4. 图表中只使用基本节点和连接，不要使用复杂样式
+5. 避免在节点文字中使用特殊字符和标点符号
+6. 所有节点必须有连接，不能有孤立节点
 
-有效Mermaid代码示例：
+非常简单的有效Mermaid代码示例：
 ```mermaid
 flowchart TD
-    A[开始] --> B[过程]
-    B --> C[结束]
+    A[开始] --> B[学习]
+    B --> C[工作]
 ```
 
-另一个示例：
-```mermaid
-mindmap
-  root((职业))
-    路径1
-      技能A
-      技能B
-    路径2
-      技能C
-```
+注意：请确保使用最简单的语法创建图表，避免任何可能导致语法错误的复杂功能。
 """
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和图表的完整报告。"}
+            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和一个简单流程图的完整报告。图表必须非常简单，仅使用基本节点和连接。"}
         ]
         
         # Track with LangSmith if available
@@ -560,7 +559,8 @@ mindmap
             response = call_openrouter(
                 messages=messages, 
                 model=model, 
-                temperature=0.7
+                temperature=0.7,
+                run_name="report_generation_llm"
             )
             
             # Record the end of the run
@@ -652,43 +652,65 @@ with tab1:
             # Display the final report
             st.subheader("Final Career Planning Report")
             
-            # 更新处理图表的方式
+            # 更新处理图表的方式，添加更多健壮性
             try:
-                # Process and display text and Mermaid diagrams separately
-                report_parts = st.session_state.final_report.split("```mermaid")
-                
-                # Display the first text part
-                if report_parts and len(report_parts) > 0:
-                    st.write(report_parts[0])
-                
-                # Process each mermaid diagram and following text
-                for i in range(1, len(report_parts)):
-                    part = report_parts[i]
-                    # Split by the closing code block marker
-                    if "```" in part:
-                        mermaid_code, remaining_text = part.split("```", 1)
-                        # Clean mermaid code and render
-                        mermaid_code = mermaid_code.strip()
-                        
-                        # 为调试添加一个选项来显示原始mermaid代码
-                        with st.expander("View Diagram Code"):
-                            st.code(mermaid_code, language="mermaid")
-                        
-                        try:
-                            # Render diagram with error handling
-                            render_mermaid(mermaid_code)
-                        except Exception as e:
-                            st.error(f"Failed to render diagram: {str(e)}")
-                            st.code(mermaid_code, language="mermaid")
-                        
-                        # Display the text that follows
-                        st.write(remaining_text)
-                    else:
-                        # No closing marker found, just display as text
-                        st.write(part)
+                # 检查是否包含Mermaid图表
+                if "```mermaid" in st.session_state.final_report:
+                    # Process and display text and Mermaid diagrams separately
+                    report_parts = st.session_state.final_report.split("```mermaid")
+                    
+                    # Display the first text part
+                    if report_parts and len(report_parts) > 0:
+                        st.write(report_parts[0])
+                    
+                    # Process each mermaid diagram and following text
+                    for i in range(1, len(report_parts)):
+                        part = report_parts[i]
+                        # Split by the closing code block marker
+                        if "```" in part:
+                            mermaid_code, remaining_text = part.split("```", 1)
+                            # Clean mermaid code and render
+                            mermaid_code = mermaid_code.strip()
+                            
+                            # 为调试添加一个选项来显示原始mermaid代码
+                            with st.expander("查看图表代码"):
+                                st.code(mermaid_code, language="mermaid")
+                            
+                            # 尝试修复常见的语法错误
+                            if "graph" in mermaid_code and "flowchart" not in mermaid_code:
+                                # 旧版语法，转换为新版
+                                mermaid_code = mermaid_code.replace("graph", "flowchart")
+                            
+                            try:
+                                # Render diagram with error handling
+                                render_mermaid(mermaid_code)
+                            except Exception as e:
+                                st.error(f"图表渲染失败: {str(e)}")
+                                st.code(mermaid_code, language="mermaid")
+                                
+                                # 尝试渲染一个备用的简单图表
+                                st.warning("尝试渲染备用图表...")
+                                try:
+                                    fallback_code = """
+flowchart TD
+    A[学习] --> B[实践]
+    B --> C[就业]
+                                    """
+                                    render_mermaid(fallback_code)
+                                except:
+                                    st.error("备用图表也渲染失败")
+                            
+                            # Display the text that follows
+                            st.write(remaining_text)
+                        else:
+                            # No closing marker found, just display as text
+                            st.write(part)
+                else:
+                    # 如果没有图表标记，直接显示报告
+                    st.write(st.session_state.final_report)
             except Exception as e:
                 # 如果解析失败，直接显示完整报告
-                st.error(f"Error processing diagrams: {str(e)}")
+                st.error(f"处理图表时出错: {str(e)}")
                 st.write(st.session_state.final_report)
 
 # Tab 2: Agent Settings
