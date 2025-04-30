@@ -15,6 +15,7 @@ from langsmith import Client
 from langsmith.run_trees import RunTree
 import tempfile
 import streamlit.components.v1 as components
+import datetime
 
 # Load environment variables
 load_dotenv()
@@ -45,17 +46,17 @@ if 'user_inputs' not in st.session_state:
 
 if 'career_agent_settings' not in st.session_state:
     st.session_state.career_agent_settings = {
-        "role": "You are an experienced career planning consultant with rich industry knowledge and insights.",
-        "task": "Based on the user's academic background, major, desired industry and position, analyze their career development path and provide specific, feasible suggestions.",
-        "output_format": "Please provide a structured career planning analysis including:\n1. Background Analysis\n2. Career Path Suggestions\n3. Skills Development Direction\n4. Industry Outlook\n5. Short-term and Long-term Goals",
+        "role": "你是一位经验丰富的职业规划顾问，拥有丰富的行业知识和见解。",
+        "task": "基于用户的学术背景、专业、期望进入的行业和职位，分析他们的职业发展路径，并提供具体、可行的建议。",
+        "output_format": "请提供结构化的职业规划分析，包括：\n1. 背景分析\n2. 职业路径建议\n3. 技能发展方向\n4. 行业前景\n5. 短期和长期目标",
         "model": "qwen/qwen-max"
     }
 
 if 'submission_agent_settings' not in st.session_state:
     st.session_state.submission_agent_settings = {
-        "role": "You are a professional career planning report editor, skilled at integrating information and creating visually appealing reports.",
-        "task": "Based on the career planning draft, supplement with relevant industry data and information to create a complete report with text descriptions and visualizations.",
-        "output_format": "Please provide a professional career planning report including:\n1. Executive Summary\n2. Detailed Analysis\n3. Data-Supported Charts\n4. Action Plan\n5. Resource Recommendations",
+        "role": "你是一位专业的职业规划报告编辑，擅长整合信息并创建视觉吸引力强的报告。",
+        "task": "基于职业规划草稿，补充相关行业数据和信息，创建一份包含文字描述和可视化内容的完整报告。",
+        "output_format": "请提供专业的职业规划报告，包括：\n1. 执行摘要\n2. 详细分析\n3. 数据支持图表\n4. 行动计划\n5. 资源建议",
         "model": "qwen/qwen-max"
     }
 
@@ -198,7 +199,7 @@ def check_api_status():
             os.environ["LANGCHAIN_TRACING_V2"] = "true"
             os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
             
-            # 创建客户端并测试连接
+            # 创建客户端并测试连接 (仅在API状态页面显示消息)
             client = Client(api_key=langsmith_key)
             
             # 简单地使用API调用来验证连接，不使用get_project方法
@@ -213,7 +214,7 @@ def check_api_status():
                 run_tree.post()
                 run_tree.end(outputs={"result": "success"})
                 st.session_state.api_status["langsmith"] = True
-                st.info("LangSmith API连接成功")
+                # 不显示成功消息，只在API状态页面显示
             except Exception as inner_e:
                 st.error(f"LangSmith API连接测试失败: {str(inner_e)}")
                 st.session_state.api_status["langsmith"] = False
@@ -229,37 +230,23 @@ def init_langsmith():
     try:
         langsmith_api_key = st.secrets.get("LANGSMITH_API_KEY")
         if not langsmith_api_key:
-            st.warning("LangSmith API密钥未设置，无法启用监控")
+            # 不在UI中显示警告，只返回None
             return None
             
-        langsmith_project = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
+        langsmith_project = st.secrets.get("LANGSMITH_PROJECT", "career-planner") 
         # 设置所有必要的环境变量
         os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
-        os.environ["LANGCHAIN_PROJECT"] = langsmith_project
+        os.environ["LANGCHAIN_PROJECT"] = langsmith_project or "default"
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
         os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+        # 添加额外的必要环境变量
+        os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key  # 兼容性
         
-        # 创建并返回客户端
-        client = Client(api_key=langsmith_api_key)
-        
-        # 简单测试连接而不使用get_project方法
-        try:
-            # 创建一个简单的运行来测试API连接
-            run_tree = RunTree(
-                name="test_connection",
-                run_type="chain",
-                inputs={"test": "connection"},
-                client=client
-            )
-            run_tree.post()
-            run_tree.end(outputs={"result": "success"})
-            st.success(f"LangSmith连接成功，监控已启用（项目：{langsmith_project}）")
-        except Exception as e:
-            st.error(f"LangSmith API连接测试失败: {str(e)}")
-        
-        return client
+        # 创建并返回客户端 - 不显示任何UI消息
+        return Client(api_key=langsmith_api_key) 
     except Exception as e:
-        st.error(f"LangSmith初始化错误: {str(e)}")
+        # 只在Debug模式下记录错误，不显示UI消息
+        print(f"LangSmith初始化错误: {str(e)}")
         return None
 
 # 修改调用OpenRouter的函数，添加LangSmith监控
@@ -444,21 +431,21 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         model = agent_settings["model"]
         
         user_info = f"""
-        User Information:
-        - University: {user_inputs['university']}
-        - Major: {user_inputs['major']}
-        - Target Industry: {user_inputs['target_industry']}
-        - Target Position: {user_inputs['target_position']}
+        用户信息:
+        - 大学: {user_inputs['university']}
+        - 专业: {user_inputs['major']}
+        - 目标行业: {user_inputs['target_industry']}
+        - 目标职位: {user_inputs['target_position']}
         
-        Transcript Information:
+        成绩单信息:
         {user_inputs['transcript_text']}
         
-        Knowledge Base Information:
+        知识库信息:
         {kb_data}
         """
         
         messages = [
-            {"role": "system", "content": f"{role}\n\n{task}\n\nOutput Format Requirements:\n{output_format}"},
+            {"role": "system", "content": f"{role}\n\n{task}\n\n输出格式要求:\n{output_format}"},
             {"role": "user", "content": user_info}
         ]
         
@@ -467,16 +454,33 @@ def generate_career_planning_draft(user_inputs, agent_settings):
             # 确保设置了正确的追踪变量
             os.environ["LANGCHAIN_TRACING_V2"] = "true"
             
-            # Start the run manually
-            run_tree = RunTree(
-                name="career_planning_draft",
-                run_type="chain",
-                inputs={"user_inputs": user_inputs, "agent_settings": agent_settings},
-                client=langsmith_client
-            )
-            
-            # Start the run explicitly
-            run_tree.post()
+            # 使用直接API请求来确保被记录 
+            run_id = None
+            try:
+                # 创建顶级运行
+                create_run_response = requests.post(
+                    "https://api.smith.langchain.com/runs",
+                    headers={
+                        "Authorization": f"Bearer {os.environ['LANGSMITH_API_KEY']}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "name": "career_planning_draft",
+                        "run_type": "chain",
+                        "inputs": {"input": user_info},
+                        "session_name": f"User Session - {str(user_inputs['university'])}",
+                        "project_name": os.environ["LANGCHAIN_PROJECT"]
+                    }
+                )
+                
+                if create_run_response.status_code == 200:
+                    run_data = create_run_response.json()
+                    run_id = run_data.get("id")
+                    print(f"成功创建LangSmith运行：{run_id}")
+                else:
+                    print(f"创建LangSmith运行失败: {create_run_response.status_code} - {create_run_response.text}")
+            except Exception as e:
+                print(f"LangSmith API error: {str(e)}")
             
             # Make API call through OpenRouter with specific run name
             response = call_openrouter(
@@ -486,8 +490,24 @@ def generate_career_planning_draft(user_inputs, agent_settings):
                 run_name="career_planning_llm"
             )
             
-            # Record the end of the run
-            run_tree.end(outputs={"draft_report": response})
+            # 更新运行结果
+            if run_id:
+                try:
+                    requests.patch(
+                        f"https://api.smith.langchain.com/runs/{run_id}",
+                        headers={
+                            "Authorization": f"Bearer {os.environ['LANGSMITH_API_KEY']}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "outputs": {"output": response},
+                            "end_time": datetime.datetime.utcnow().isoformat() + "Z",
+                            "status": "success"
+                        }
+                    )
+                except Exception as e:
+                    print(f"更新LangSmith运行失败: {str(e)}")
+            
             return response
         else:
             # Make API call without tracking
@@ -497,7 +517,7 @@ def generate_career_planning_draft(user_inputs, agent_settings):
                 temperature=0.7
             )
     except Exception as e:
-        return f"Error during generation: {str(e)}"
+        return f"报告生成过程中发生错误: {str(e)}"
 
 # Function to generate final career planning report with LangSmith tracking
 def generate_final_report(draft_report, agent_settings):
@@ -535,27 +555,44 @@ flowchart TD
 ```
 
 注意：请确保使用最简单的语法创建图表，避免任何可能导致语法错误的复杂功能。
+所有内容请使用中文输出。
 """
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和一个简单流程图的完整报告。图表必须非常简单，仅使用基本节点和连接。"}
+            {"role": "user", "content": f"这是职业规划报告草稿：\n\n{draft_report}\n\n基于这份草稿，请补充相关信息，创建一份包含文字和一个简单流程图的完整报告。图表必须非常简单，仅使用基本节点和连接。请用中文输出所有内容。"}
         ]
         
         # Track with LangSmith if available
         if langsmith_client:
-            # Start the run manually
-            run_tree = RunTree(
-                name="final_report_generation",
-                run_type="chain",
-                inputs={"draft_report": draft_report, "agent_settings": agent_settings},
-                client=langsmith_client
-            )
+            # 使用直接API请求来确保被记录
+            run_id = None
+            try:
+                # 创建顶级运行
+                create_run_response = requests.post(
+                    "https://api.smith.langchain.com/runs",
+                    headers={
+                        "Authorization": f"Bearer {os.environ['LANGSMITH_API_KEY']}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "name": "final_report_generation",
+                        "run_type": "chain", 
+                        "inputs": {"draft_report": draft_report[:500] + "..."},  # 仅发送摘要以避免太大
+                        "project_name": os.environ["LANGCHAIN_PROJECT"]
+                    }
+                )
+                
+                if create_run_response.status_code == 200:
+                    run_data = create_run_response.json()
+                    run_id = run_data.get("id")
+                    print(f"成功创建LangSmith运行：{run_id}")
+                else:
+                    print(f"创建LangSmith运行失败: {create_run_response.status_code} - {create_run_response.text}")
+            except Exception as e:
+                print(f"LangSmith API error: {str(e)}")
             
-            # Start the run explicitly
-            run_tree.post()
-            
-            # Make API call through OpenRouter
+            # Make API call through OpenRouter with specific run name
             response = call_openrouter(
                 messages=messages, 
                 model=model, 
@@ -563,8 +600,24 @@ flowchart TD
                 run_name="report_generation_llm"
             )
             
-            # Record the end of the run
-            run_tree.end(outputs={"final_report": response})
+            # 更新运行结果
+            if run_id:
+                try:
+                    requests.patch(
+                        f"https://api.smith.langchain.com/runs/{run_id}",
+                        headers={
+                            "Authorization": f"Bearer {os.environ['LANGSMITH_API_KEY']}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "outputs": {"output": response[:500] + "..."},  # 仅发送摘要以避免太大
+                            "end_time": datetime.datetime.utcnow().isoformat() + "Z",
+                            "status": "success"
+                        }
+                    )
+                except Exception as e:
+                    print(f"更新LangSmith运行失败: {str(e)}")
+            
             return response
         else:
             # Make API call without tracking
@@ -574,7 +627,7 @@ flowchart TD
                 temperature=0.7
             )
     except Exception as e:
-        return f"Error during generation: {str(e)}"
+        return f"报告生成过程中发生错误: {str(e)}"
 
 # Check API status on startup
 check_api_status()
