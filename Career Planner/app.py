@@ -88,17 +88,16 @@ def check_api_status():
 @traceable(run_type="llm", name="OpenRouter AI调用")
 def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name="openrouter_call"):
     """调用OpenRouter API获取LLM响应"""
+    # 首先创建模型信息的元数据字典，确保会被LangSmith记录
+    run_metadata = {
+        "model_name": model,
+        "temperature": str(temperature), 
+        "is_vision": str(is_vision),
+        "messages_count": str(len(messages)),
+        "model_provider": "OpenRouter"
+    }
+    
     try:
-        # 添加模型信息到LangSmith跟踪
-        metadata = {
-            "model": model,
-            "temperature": temperature, 
-            "is_vision": is_vision,
-            "run_name": run_name,
-            "messages_count": len(messages)
-        }
-        # 这里添加的元数据会被LangSmith记录
-        
         api_key = st.secrets.get("OPENROUTER_API_KEY")
         if not api_key:
             return "Error: OpenRouter API key not set"
@@ -131,6 +130,11 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
         
         result = response.json()
         
+        # 如果有模型信息，添加到元数据
+        if "model" in result:
+            run_metadata["actual_model"] = result["model"]
+            print(f"实际使用的模型: {result['model']}")
+        
         # 提取响应内容
         if "choices" in result and len(result["choices"]) > 0:
             return result["choices"][0]["message"]["content"]
@@ -160,6 +164,12 @@ def init_langsmith():
     except Exception as e:
         st.error(f"Error initializing LangSmith: {str(e)}")
         return False
+
+# 提供纯文本下载选项的函数
+def get_text_file_downloader_html(text, file_label, file_name):
+    bin_str = base64.b64encode(text.encode()).decode()
+    href = f'<a href="data:text/plain;base64,{bin_str}" download="{file_name}">点击下载 {file_label}</a>'
+    return href 
 
 # 初始化LangSmith
 langsmith_enabled = init_langsmith()
@@ -420,6 +430,14 @@ def render_mermaid(mermaid_code):
 # Function to query knowledge database
 @traceable(run_type="chain", name="知识库查询")
 def query_knowledge_db(user_inputs):
+    # 创建元数据字典
+    run_metadata = {
+        "query_type": "knowledge_db",
+        "major": user_inputs['major'],
+        "target_industry": user_inputs['target_industry'],
+        "target_position": user_inputs['target_position']
+    }
+    
     print(f"查询知识库: 专业={user_inputs['major']}, 行业={user_inputs['target_industry']}, 职位={user_inputs['target_position']}")
     results = []
     
@@ -553,6 +571,14 @@ def query_knowledge_db(user_inputs):
 @traceable(run_type="chain", name="职业规划草稿生成")
 def generate_career_planning_draft(user_inputs, agent_settings):
     """使用追踪装饰器生成职业规划草稿"""
+    # 创建元数据字典
+    run_metadata = {
+        "model": agent_settings["model"],
+        "step": "draft_generation",
+        "target_industry": user_inputs['target_industry'],
+        "target_position": user_inputs['target_position']
+    }
+    
     try:
         # Query the knowledge database
         kb_data = query_knowledge_db(user_inputs)
@@ -613,6 +639,13 @@ def generate_career_planning_draft(user_inputs, agent_settings):
 @traceable(run_type="chain", name="最终职业规划报告生成")
 def generate_final_report(draft_report, agent_settings):
     """使用追踪装饰器生成最终职业规划报告"""
+    # 创建元数据字典
+    run_metadata = {
+        "model": agent_settings["model"],
+        "step": "final_report_generation",
+        "draft_length": len(draft_report) if draft_report else 0
+    }
+    
     try:
         # Prepare the prompt for the submission agent
         role = agent_settings["role"]
@@ -896,10 +929,4 @@ with tab3:
     if st.button("刷新状态"):
         with st.spinner("正在检查API状态..."):
             check_api_status()
-        st.rerun()
-
-# 提供纯文本下载选项的函数
-def get_text_file_downloader_html(text, file_label, file_name):
-    bin_str = base64.b64encode(text.encode()).decode()
-    href = f'<a href="data:text/plain;base64,{bin_str}" download="{file_name}">点击下载 {file_label}</a>'
-    return href 
+        st.rerun() 
