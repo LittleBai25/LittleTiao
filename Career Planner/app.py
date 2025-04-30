@@ -192,16 +192,20 @@ def check_api_status():
     try:
         langsmith_key = st.secrets.get("LANGSMITH_API_KEY")
         if langsmith_key:
-            os.environ["LANGSMITH_API_KEY"] = langsmith_key  # Make sure key is set in env 
+            # 确保环境变量设置正确
+            os.environ["LANGSMITH_API_KEY"] = langsmith_key
             os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"  # Enable tracing
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"  # 确保使用正确的端点
             
             client = Client(api_key=langsmith_key)
-            # Just try to access the API
-            _ = client.list_projects(limit=1)
-            st.session_state.api_status["langsmith"] = True
+            # 测试与API的连接
+            projects = client.list_projects(limit=1)
+            st.session_state.api_status["langsmith"] = len(projects) >= 0
+            st.info(f"LangSmith连接成功: 发现 {len(projects)} 个项目")
         else:
             st.session_state.api_status["langsmith"] = False
+            st.warning("LangSmith API密钥未设置")
     except Exception as e:
         st.error(f"LangSmith API error: {str(e)}")
         st.session_state.api_status["langsmith"] = False
@@ -211,22 +215,33 @@ def init_langsmith():
     try:
         langsmith_api_key = st.secrets.get("LANGSMITH_API_KEY")
         if not langsmith_api_key:
+            st.warning("LangSmith API密钥未设置，无法启用监控")
             return None
             
         langsmith_project = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
-        # Set environment variables for LangSmith
+        # 设置所有必要的环境变量
         os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
         os.environ["LANGCHAIN_PROJECT"] = langsmith_project
-        os.environ["LANGCHAIN_TRACING_V2"] = "true"  # Enable tracing
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
         
-        # Return client
-        return Client(api_key=langsmith_api_key)
+        # 创建并返回客户端
+        client = Client(api_key=langsmith_api_key)
+        
+        # 测试连接
+        try:
+            _ = client.list_projects(limit=1)
+            st.success(f"LangSmith连接成功，监控已启用（项目：{langsmith_project}）")
+        except Exception as e:
+            st.error(f"LangSmith API连接测试失败: {str(e)}")
+        
+        return client
     except Exception as e:
-        st.error(f"LangSmith initialization error: {str(e)}")
+        st.error(f"LangSmith初始化错误: {str(e)}")
         return None
 
-# Function to call OpenRouter for API requests
-def call_openrouter(messages, model, temperature=0.7, is_vision=False):
+# 修改调用OpenRouter的函数，添加LangSmith监控
+def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name="openrouter_call"):
     try:
         api_key = st.secrets.get("OPENROUTER_API_KEY")
         if not api_key:
@@ -249,6 +264,25 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False):
             # Additional vision-specific settings if needed
             pass
         
+        # 添加LangSmith监控
+        langsmith_client = None
+        run_tree = None
+        
+        if os.environ.get("LANGSMITH_API_KEY"):
+            try:
+                # 尝试为该调用创建监控
+                langsmith_client = Client(api_key=os.environ["LANGSMITH_API_KEY"])
+                run_tree = RunTree(
+                    name=run_name,
+                    run_type="llm",
+                    inputs={"messages": messages, "model": model, "temperature": temperature},
+                    client=langsmith_client
+                )
+                run_tree.post()
+            except Exception as e:
+                st.warning(f"LangSmith监控启动失败: {str(e)}")
+        
+        # 发送API请求
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
@@ -256,11 +290,25 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False):
         )
         
         result = response.json()
+        
+        # 记录响应到LangSmith
+        if run_tree:
+            try:
+                run_tree.end(outputs={"response": result})
+            except Exception as e:
+                st.warning(f"LangSmith记录结果失败: {str(e)}")
+        
         if "choices" in result and len(result["choices"]) > 0:
             return result["choices"][0]["message"]["content"]
         else:
             return f"Request failed: {str(result)}"
     except Exception as e:
+        # 记录错误到LangSmith
+        if run_tree:
+            try:
+                run_tree.end(error=str(e))
+            except:
+                pass
         return f"Error during request: {str(e)}"
 
 # Function to analyze transcript with vision model through OpenRouter
@@ -394,6 +442,9 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         
         # Track with LangSmith if available
         if langsmith_client:
+            # 确保设置了正确的追踪变量
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            
             # Start the run manually
             run_tree = RunTree(
                 name="career_planning_draft",
@@ -405,11 +456,12 @@ def generate_career_planning_draft(user_inputs, agent_settings):
             # Start the run explicitly
             run_tree.post()
             
-            # Make API call through OpenRouter
+            # Make API call through OpenRouter with specific run name
             response = call_openrouter(
                 messages=messages, 
                 model=model, 
-                temperature=0.7
+                temperature=0.7,
+                run_name="career_planning_llm"
             )
             
             # Record the end of the run
@@ -679,21 +731,30 @@ with tab3:
     col1, col2 = st.columns(2)
     
     with col1:
-        status = "✅ Connected" if st.session_state.api_status["openrouter"] else "❌ Not Connected"
+        status = "✅ 已连接" if st.session_state.api_status["openrouter"] else "❌ 未连接"
         st.metric("OpenRouter API", status)
         
         if not st.session_state.api_status["openrouter"]:
-            st.warning("Please check if the OPENROUTER_API_KEY is correctly set in Streamlit Secrets")
+            st.warning("请检查Streamlit Secrets中的OPENROUTER_API_KEY是否正确设置")
     
     with col2:
-        status = "✅ Connected" if st.session_state.api_status["langsmith"] else "❌ Not Connected"
+        status = "✅ 已连接" if st.session_state.api_status["langsmith"] else "❌ 未连接"
         st.metric("LangSmith", status)
         
         if not st.session_state.api_status["langsmith"]:
-            st.warning("Please check if the LANGSMITH_API_KEY is correctly set in Streamlit Secrets")
+            st.warning("请检查Streamlit Secrets中的LANGSMITH_API_KEY是否正确设置")
+    
+    # 添加LangSmith设置信息
+    if st.session_state.api_status["langsmith"]:
+        st.subheader("LangSmith配置")
+        st.code(f"""
+项目名称: {os.environ.get('LANGCHAIN_PROJECT', '未设置')}
+端点: {os.environ.get('LANGCHAIN_ENDPOINT', '未设置')}
+追踪状态: {'启用' if os.environ.get('LANGCHAIN_TRACING_V2') == 'true' else '未启用'}
+        """)
     
     # Add a refresh button for API status
-    if st.button("Refresh Status"):
-        with st.spinner("Checking API status..."):
+    if st.button("刷新状态"):
+        with st.spinner("正在检查API状态..."):
             check_api_status()
         st.rerun() 
