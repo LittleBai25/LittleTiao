@@ -161,13 +161,65 @@ class KnowledgeDatabase:
 # Initialize knowledge database
 knowledge_db = KnowledgeDatabase()
 
+# Function to check API status
+def check_api_status():
+    # Check OpenRouter API
+    try:
+        openrouter_key = st.secrets.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+            headers = {
+                "Authorization": f"Bearer {openrouter_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://career-planner.streamlit.app"
+            }
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": "qwen/qwen-max",  # Use a default model
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "max_tokens": 5
+                }
+            )
+            st.session_state.api_status["openrouter"] = response.status_code == 200
+        else:
+            st.session_state.api_status["openrouter"] = False
+    except Exception as e:
+        st.error(f"OpenRouter API error: {str(e)}")
+        st.session_state.api_status["openrouter"] = False
+    
+    # Check LangSmith status
+    try:
+        langsmith_key = st.secrets.get("LANGSMITH_API_KEY")
+        if langsmith_key:
+            os.environ["LANGSMITH_API_KEY"] = langsmith_key  # Make sure key is set in env 
+            os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"  # Enable tracing
+            
+            client = Client(api_key=langsmith_key)
+            # Just try to access the API
+            _ = client.list_projects(limit=1)
+            st.session_state.api_status["langsmith"] = True
+        else:
+            st.session_state.api_status["langsmith"] = False
+    except Exception as e:
+        st.error(f"LangSmith API error: {str(e)}")
+        st.session_state.api_status["langsmith"] = False
+
 # Initialize LangSmith client if enabled
 def init_langsmith():
     try:
         langsmith_api_key = st.secrets.get("LANGSMITH_API_KEY")
+        if not langsmith_api_key:
+            return None
+            
         langsmith_project = st.secrets.get("LANGSMITH_PROJECT", "career-planner")
+        # Set environment variables for LangSmith
         os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
         os.environ["LANGCHAIN_PROJECT"] = langsmith_project
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"  # Enable tracing
+        
+        # Return client
         return Client(api_key=langsmith_api_key)
     except Exception as e:
         st.error(f"LangSmith initialization error: {str(e)}")
@@ -249,45 +301,6 @@ def render_mermaid(mermaid_code):
     </script>
     """
     components.html(html, height=500)
-
-# Function to check API status
-def check_api_status():
-    # Check OpenRouter API
-    try:
-        openrouter_key = st.secrets.get("OPENROUTER_API_KEY")
-        if openrouter_key:
-            headers = {
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://career-planner.streamlit.app"
-            }
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": "qwen/qwen-max",  # Use a default model
-                    "messages": [{"role": "user", "content": "Hello"}],
-                    "max_tokens": 5
-                }
-            )
-            st.session_state.api_status["openrouter"] = response.status_code == 200
-        else:
-            st.session_state.api_status["openrouter"] = False
-    except:
-        st.session_state.api_status["openrouter"] = False
-    
-    # Check LangSmith status
-    try:
-        langsmith_key = st.secrets.get("LANGSMITH_API_KEY")
-        if langsmith_key:
-            client = Client(api_key=langsmith_key)
-            # Just try to access the API
-            _ = client.list_projects(limit=1)
-            st.session_state.api_status["langsmith"] = True
-        else:
-            st.session_state.api_status["langsmith"] = False
-    except:
-        st.session_state.api_status["langsmith"] = False
 
 # Function to query knowledge database
 def query_knowledge_db(user_inputs):
@@ -373,13 +386,16 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         
         # Track with LangSmith if available
         if langsmith_client:
-            # Create a run but don't use it as a context manager
+            # Start the run manually
             run_tree = RunTree(
                 name="career_planning_draft",
                 run_type="chain",
                 inputs={"user_inputs": user_inputs, "agent_settings": agent_settings},
                 client=langsmith_client
             )
+            
+            # Start the run explicitly
+            run_tree.post()
             
             # Make API call through OpenRouter
             response = call_openrouter(
@@ -420,13 +436,16 @@ def generate_final_report(draft_report, agent_settings):
         
         # Track with LangSmith if available
         if langsmith_client:
-            # Create a run but don't use it as a context manager
+            # Start the run manually
             run_tree = RunTree(
                 name="final_report_generation",
                 run_type="chain",
                 inputs={"draft_report": draft_report, "agent_settings": agent_settings},
                 client=langsmith_client
             )
+            
+            # Start the run explicitly
+            run_tree.post()
             
             # Make API call through OpenRouter
             response = call_openrouter(
