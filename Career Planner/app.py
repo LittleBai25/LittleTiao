@@ -16,8 +16,15 @@ from langsmith.run_helpers import traceable
 import tempfile
 import streamlit.components.v1 as components
 import datetime
-from docx import Document
 from io import BytesIO
+
+# 尝试导入python-docx库
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    print("警告: python-docx库未安装，Word文档导出功能将不可用")
 
 # Load environment variables
 load_dotenv()
@@ -85,10 +92,21 @@ def check_api_status():
         st.error(f"LangSmith API error: {str(e)}")
         st.session_state.api_status["langsmith"] = False
 
-# 调用OpenRouter的函数 - 移至前面，确保在其他函数调用前定义
+# 添加一个修改后的call_openrouter函数，包含模型信息的追踪
+@traceable(run_type="llm", name="OpenRouter AI调用")
 def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name="openrouter_call"):
     """调用OpenRouter API获取LLM响应"""
     try:
+        # 添加模型信息到LangSmith跟踪
+        metadata = {
+            "model": model,
+            "temperature": temperature, 
+            "is_vision": is_vision,
+            "run_name": run_name,
+            "messages_count": len(messages)
+        }
+        # 这里添加的元数据会被LangSmith记录
+        
         api_key = st.secrets.get("OPENROUTER_API_KEY")
         if not api_key:
             return "Error: OpenRouter API key not set"
@@ -110,6 +128,8 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
             # Additional vision-specific settings if needed
             pass
         
+        print(f"调用OpenRouter API - 模型: {model}, 温度: {temperature}")
+        
         # 发送API请求
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -123,9 +143,13 @@ def call_openrouter(messages, model, temperature=0.7, is_vision=False, run_name=
         if "choices" in result and len(result["choices"]) > 0:
             return result["choices"][0]["message"]["content"]
         else:
-            return f"Request failed: {str(result)}"
+            error_msg = f"Request failed: {str(result)}"
+            print(error_msg)
+            return error_msg
     except Exception as e:
-        return f"Error during request: {str(e)}"
+        error_msg = f"Error during request: {str(e)}"
+        print(error_msg)
+        return error_msg
 
 # Initialize LangSmith client
 def init_langsmith():
@@ -547,6 +571,9 @@ def generate_career_planning_draft(user_inputs, agent_settings):
         output_format = agent_settings["output_format"]
         model = agent_settings["model"]
         
+        # 记录使用的模型信息
+        print(f"职业规划草稿使用模型: {model}")
+        
         user_info = f"""
         用户信息:
         - 大学: {user_inputs['university']}
@@ -600,6 +627,9 @@ def generate_final_report(draft_report, agent_settings):
         task = agent_settings["task"]
         output_format = agent_settings["output_format"]
         model = agent_settings["model"]
+        
+        # 记录使用的模型信息
+        print(f"最终报告使用模型: {model}")
         
         # 更新系统提示，提供更简单的Mermaid图表示例和更严格的语法要求
         system_prompt = f"""{role}
@@ -728,11 +758,12 @@ with tab1:
             # 生成Word文档并提供下载链接
             if st.session_state.final_report:
                 doc_io = generate_word_document("职业规划报告", st.session_state.final_report)
-                st.markdown(
-                    get_binary_file_downloader_html(doc_io, "职业规划报告.docx", "Career_Planning_Report.docx"),
-                    unsafe_allow_html=True
-                )
-                st.markdown("---")
+                if doc_io:  # 仅在文档生成成功时提供下载链接
+                    st.markdown(
+                        get_binary_file_downloader_html(doc_io, "职业规划报告.docx", "Career_Planning_Report.docx"),
+                        unsafe_allow_html=True
+                    )
+                    st.markdown("---")
             
             # 更新处理图表的方式，添加更多健壮性
             try:
@@ -879,57 +910,67 @@ with tab3:
 
 # 添加一个函数来生成可下载的Word文档
 def generate_word_document(title, content):
-    doc = Document()
-    doc.add_heading(title, 0)
-    
-    # 添加生成时间
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    doc.add_paragraph(f"生成时间: {current_time}")
-    
-    # 添加内容 - 处理Mermaid图表
-    if "```mermaid" in content:
-        parts = content.split("```mermaid")
+    # 首先检查docx库是否可用
+    if not DOCX_AVAILABLE:
+        st.warning("Word文档导出功能不可用。请安装python-docx库: pip install python-docx")
+        return None
         
-        # 添加第一部分文本
-        if parts[0].strip():
-            for paragraph in parts[0].strip().split('\n\n'):
+    try:
+        doc = Document()
+        doc.add_heading(title, 0)
+        
+        # 添加生成时间
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        doc.add_paragraph(f"生成时间: {current_time}")
+        
+        # 添加内容 - 处理Mermaid图表
+        if "```mermaid" in content:
+            parts = content.split("```mermaid")
+            
+            # 添加第一部分文本
+            if parts[0].strip():
+                for paragraph in parts[0].strip().split('\n\n'):
+                    if paragraph.strip():
+                        doc.add_paragraph(paragraph.strip())
+            
+            # 处理每个图表及其后面的文本
+            for i in range(1, len(parts)):
+                part = parts[i]
+                if "```" in part:
+                    mermaid_code, remaining_text = part.split("```", 1)
+                    
+                    # 添加图表说明
+                    doc.add_heading("职业路径图表", level=1)
+                    doc.add_paragraph("注意: 由于Word文档限制，图表无法显示。请在Web应用中查看完整图表。")
+                    doc.add_paragraph(f"图表代码: {mermaid_code.strip()}", style='Quote')
+                    
+                    # 添加剩余文本
+                    if remaining_text.strip():
+                        for paragraph in remaining_text.strip().split('\n\n'):
+                            if paragraph.strip():
+                                doc.add_paragraph(paragraph.strip())
+                else:
+                    # 如果没有闭合的```，则添加为普通文本
+                    if part.strip():
+                        for paragraph in part.strip().split('\n\n'):
+                            if paragraph.strip():
+                                doc.add_paragraph(paragraph.strip())
+        else:
+            # 没有图表，直接添加全部内容
+            for paragraph in content.split('\n\n'):
                 if paragraph.strip():
                     doc.add_paragraph(paragraph.strip())
         
-        # 处理每个图表及其后面的文本
-        for i in range(1, len(parts)):
-            part = parts[i]
-            if "```" in part:
-                mermaid_code, remaining_text = part.split("```", 1)
-                
-                # 添加图表说明
-                doc.add_heading("职业路径图表", level=1)
-                doc.add_paragraph("注意: 由于Word文档限制，图表无法显示。请在Web应用中查看完整图表。")
-                doc.add_paragraph(f"图表代码: {mermaid_code.strip()}", style='Quote')
-                
-                # 添加剩余文本
-                if remaining_text.strip():
-                    for paragraph in remaining_text.strip().split('\n\n'):
-                        if paragraph.strip():
-                            doc.add_paragraph(paragraph.strip())
-            else:
-                # 如果没有闭合的```，则添加为普通文本
-                if part.strip():
-                    for paragraph in part.strip().split('\n\n'):
-                        if paragraph.strip():
-                            doc.add_paragraph(paragraph.strip())
-    else:
-        # 没有图表，直接添加全部内容
-        for paragraph in content.split('\n\n'):
-            if paragraph.strip():
-                doc.add_paragraph(paragraph.strip())
-    
-    # 保存到内存中
-    docx_io = BytesIO()
-    doc.save(docx_io)
-    docx_io.seek(0)
-    
-    return docx_io
+        # 保存到内存中
+        docx_io = BytesIO()
+        doc.save(docx_io)
+        docx_io.seek(0)
+        
+        return docx_io
+    except Exception as e:
+        st.error(f"生成Word文档时出错: {str(e)}")
+        st.warning("Word文档生成失败。请检查python-docx库的安装和依赖项。您仍然可以看到网页版报告。")
+        return None
 
 # 提供下载链接的函数
 def get_binary_file_downloader_html(bin_file, file_label, file_name):
