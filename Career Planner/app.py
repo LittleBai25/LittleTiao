@@ -67,17 +67,10 @@ def check_api_status():
             # 创建客户端并测试连接 (仅在API状态页面显示消息)
             client = Client(api_key=langsmith_key)
             
-            # 简单地使用API调用来验证连接，不使用get_project方法
+            # 简单地使用API调用来验证连接
             try:
-                # 尝试创建一个简单的运行来测试API连接
-                run_tree = RunTree(
-                    name="test_connection",
-                    run_type="chain",
-                    inputs={"test": "connection"},
-                    client=client
-                )
-                run_tree.post()
-                run_tree.end(outputs={"result": "success"})
+                # 使用Client的list_projects方法检查连接
+                projects = client.list_projects(limit=1)
                 st.session_state.api_status["langsmith"] = True
                 # 不显示成功消息，只在API状态页面显示
             except Exception as inner_e:
