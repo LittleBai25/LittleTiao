@@ -434,6 +434,11 @@ def render_mermaid(mermaid_code):
     # 清理可能包含的空格或特殊字符
     mermaid_code = mermaid_code.strip()
     
+    # 尝试修复常见的语法错误
+    if "graph" in mermaid_code and "flowchart" not in mermaid_code:
+        # 旧版语法，转换为新版
+        mermaid_code = mermaid_code.replace("graph", "flowchart")
+    
     html = f"""
     <div class="mermaid">
     {mermaid_code}
@@ -446,6 +451,17 @@ def render_mermaid(mermaid_code):
             securityLevel: 'loose',
             logLevel: 'error'
         }});
+        
+        // 添加错误处理
+        window.addEventListener('error', function(e) {{
+            if (e.message && e.message.includes('mermaid')) {{
+                document.querySelectorAll('.mermaid').forEach(function(el) {{
+                    if (el.innerHTML.trim() === '') {{
+                        el.innerHTML = '<div style="color:red;padding:10px;border:1px solid red;border-radius:5px;">图表渲染错误，请检查代码语法</div>';
+                    }}
+                }});
+            }}
+        }}, true);
     </script>
     """
     components.html(html, height=500)
@@ -829,6 +845,65 @@ with tab1:
                                 with st.expander("查看图表代码"):
                                     st.code(mermaid_code, language="mermaid")
                                 
+                                # 添加Mermaid语法帮助
+                                with st.expander("Mermaid图表语法帮助"):
+                                    st.markdown("""
+                                    ### Mermaid图表语法基础
+                                    
+                                    #### 基本流程图
+                                    ```
+                                    flowchart TD
+                                        A[开始] --> B[步骤2]
+                                        B --> C[结束]
+                                    ```
+                                    
+                                    #### 节点形状
+                                    - 方框: `A[文本]`
+                                    - 圆角框: `B(文本)`
+                                    - 圆形: `C((文本))`
+                                    - 菱形: `D{文本}`
+                                    
+                                    #### 连接线
+                                    - 箭头: `A --> B`
+                                    - 粗箭头: `A ==> B`
+                                    - 虚线: `A -.-> B`
+                                    - 无箭头: `A --- B`
+                                    
+                                    #### 方向
+                                    - TD: 从上到下
+                                    - LR: 从左到右
+                                    
+                                    查看更多语法: [Mermaid流程图文档](https://mermaid.js.org/syntax/flowchart.html)
+                                    """)
+                                
+                                # 添加用户编辑图表的功能
+                                edited_mermaid_code = st.text_area(
+                                    "编辑图表代码",
+                                    value=mermaid_code,
+                                    height=200,
+                                    key=f"mermaid_editor_{i}"
+                                )
+                                
+                                # 创建按钮行
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    # 使用编辑后的代码渲染图表
+                                    if st.button("更新图表", key=f"update_chart_{i}"):
+                                        # 保存原始代码以便重置
+                                        if f"original_code_{i}" not in st.session_state:
+                                            st.session_state[f"original_code_{i}"] = mermaid_code
+                                        mermaid_code = edited_mermaid_code
+                                
+                                with col2:
+                                    # 添加重置按钮
+                                    if f"original_code_{i}" in st.session_state and st.button("重置图表", key=f"reset_chart_{i}"):
+                                        mermaid_code = st.session_state[f"original_code_{i}"]
+                                        edited_mermaid_code = mermaid_code
+                                        st.session_state[f"mermaid_editor_{i}"] = mermaid_code
+                                        st.success("图表已重置为原始版本")
+                                        # 需要rerun来重新加载text_area的值
+                                        st.rerun()
+                                
                                 # 尝试修复常见的语法错误
                                 if "graph" in mermaid_code and "flowchart" not in mermaid_code:
                                     # 旧版语法，转换为新版
@@ -837,9 +912,23 @@ with tab1:
                                 try:
                                     # Render diagram with error handling
                                     render_mermaid(mermaid_code)
+                                    
+                                    # 显示成功消息（如果是编辑后的代码）
+                                    if mermaid_code == edited_mermaid_code and st.session_state.get(f"previous_code_{i}", "") != mermaid_code:
+                                        st.success("图表更新成功！")
+                                        st.session_state[f"previous_code_{i}"] = mermaid_code
                                 except Exception as e:
                                     st.error(f"图表渲染失败: {str(e)}")
                                     st.code(mermaid_code, language="mermaid")
+                                    
+                                    # 更详细的错误提示
+                                    st.warning("常见的Mermaid语法错误包括：")
+                                    st.markdown("""
+                                    - 节点ID中使用了特殊字符
+                                    - 箭头方向定义错误（应使用 --> 或 ==> 等）
+                                    - 节点缺少标签文本 [标签文本]
+                                    - 图表类型拼写错误（应为flowchart而非flowchar等）
+                                    """)
                                     
                                     # 尝试渲染一个备用的简单图表
                                     st.warning("尝试渲染备用图表...")
