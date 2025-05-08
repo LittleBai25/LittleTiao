@@ -512,14 +512,6 @@ def main():
                 st.error("未找到 OpenAI API 密钥，请检查配置")
                 return
             
-            # 验证 API 密钥是否有效
-            if st.secrets.get("OPENAI_API_KEY"):
-                logger.info("API 配置验证成功")
-                st.success("✅ API配置成功")
-            
-            # 显示当前使用的模型（移到这里）
-            st.markdown(f"<div class='model-info'>🤖 当前使用模型: <b>{st.session_state.current_model}</b></div>", unsafe_allow_html=True)
-            
             # 创建提示词模板实例并存储在session_state中
             if 'prompt_templates' not in st.session_state:
                 logger.info("初始化提示词模板")
@@ -785,6 +777,11 @@ def main():
 
     with system_tab2:
         st.title("标签匹配AI提示词设置")
+        
+        if st.secrets.get("OPENAI_API_KEY"):
+            logger.info("API 配置验证成功")
+            st.success("✅ API配置成功")
+        st.markdown(f"<div class='model-info'>🤖 当前使用模型: <b>{st.session_state.current_model}</b></div>", unsafe_allow_html=True)
         
         # 使用session_state中的prompt_templates
         prompt_templates = st.session_state.prompt_templates
