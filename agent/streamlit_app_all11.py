@@ -467,9 +467,6 @@ def main():
     
     add_custom_css()
 
-     # 添加页面标题
-    st.markdown("<h1 class='page-title'>留学文案匹配平台</h1>", unsafe_allow_html=True)
-    
     # 初始化 session_state 变量
     if 'tagged_data' not in st.session_state:
         st.session_state.tagged_data = None
@@ -546,11 +543,6 @@ def main():
                 logger.error(f"初始化操作要点提取器出错: {str(e)}")
                 st.session_state.points_extractor = None
             
-            # 添加选项卡来切换输入方式
-            # input_tab1, = st.tabs(["手动输入"])
-            
-            # 删除 input_tab1 = st.tabs(["手动输入"]) 和 with input_tab1:，将其内部内容直接放在 system_tab1 下。
-
             # 第一行：预计入学时间、申请国家、申请专业、留学类别
             col1, col2, col3, col4 = st.columns(4)
             with col1:
