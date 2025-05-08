@@ -30,3 +30,4 @@ chromadb
 openpyxl
 xlsxwriter
 pysqlite3-binary
+setuptools
