@@ -545,18 +545,18 @@ def main():
 
             with input_tab1:
                 st.subheader("客户基本信息")
-                # 预计入学时间
-                col1, col2 = st.columns(2)
+                # 第一行：预计入学时间、申请国家、申请专业、留学类别
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    year = st.selectbox("预计入学年份", [str(y) for y in range(2024, 2035)], key="year", index=0)
+                    year = st.selectbox("入学年份", [str(y) for y in range(2024, 2035)], key="year", index=0)
                 with col2:
-                    season = st.selectbox("预计入学季节", ["春", "夏", "秋", "冬"], key="season", index=0)
+                    season = st.selectbox("入学季节", ["春", "夏", "秋", "冬"], key="season", index=0)
+                with col3:
+                    country = st.text_input("申请国家", key="country")
+                with col4:
+                    major = st.text_input("申请专业", key="major")
 
-                # 申请国家
-                country = st.text_input("申请国家", key="country")
-                # 申请专业
-                major = st.text_input("申请专业", key="major")
-                # 留学类别
+                # 第二行：留学类别
                 study_type = st.selectbox(
                     "留学类别",
                     [
@@ -565,7 +565,11 @@ def main():
                     ],
                     key="study_type"
                 )
+
+                st.markdown("---")
+
                 # 客户背景信息
+                st.markdown("#### 客户背景信息")
                 default_background = (
                     "学生基本信息：\n"
                     "- 当前学校：\n"
@@ -573,23 +577,24 @@ def main():
                     "- 平均成绩：\n"
                     "- 语言成绩：\n"
                 )
-                background = st.text_area("客户背景信息", value=default_background, height=120, key="background")
-                # 其他信息
-                other_info = st.text_area('其他信息（如该部分信息为空，小助理不会输出"个性化服务指南"）', height=80, key="other_info")
+                background = st.text_area("请填写客户背景信息", value=default_background, height=60, key="background")
 
-                # 添加业务单位选择框
-                business_units = [
-                    "新通国际", "北京中心", "成都", "福州", "广州", "杭州留学",
-                    "合肥", "济南", "南昌", "南京", "宁波留学", "厦门", "山西", "深圳", "苏州",
-                    "天津", "温州", "武汉", "西安", "新通温哥华", "长春", "郑州", "重庆", "舟山"
-                ]
-                selected_unit = st.selectbox(
-                    "请选择业务单位",
-                    options=business_units,
-                    index=0
-                )
-                # 添加选项让用户选择是否生成个性服务指南
-                generate_service_guide = st.checkbox("生成个性服务指南", value=True)
+                # 其他信息
+                st.markdown("#### 其他信息")
+                other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=40, key="other_info")
+
+                st.markdown("---")
+
+                # 业务单位和个性服务指南选项
+                col5, col6 = st.columns([2, 1])
+                with col5:
+                    selected_unit = st.selectbox(
+                        "请选择业务单位",
+                        options=business_units,
+                        index=0
+                    )
+                with col6:
+                    generate_service_guide = st.checkbox("生成个性服务指南", value=True)
 
                 # 校验必填项
                 if st.button("开始分析", key="start_analysis"):
