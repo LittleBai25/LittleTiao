@@ -627,7 +627,7 @@ def main():
                                         update_process("1️⃣ 提取关键信息...")
                                         tag_result = process_student_case2(student_case, callback=update_process)
                                         result = tag_result
-                                        if generate_service_guide and tag_result["status"] == "success":
+                                        if generate_service_guide and tag_result["status"] == "success" and other_info.strip():
                                             update_process("2️⃣ 生成个性服务指南...")
                                             excel_path = os.path.join(os.path.dirname(__file__), '服务指南.xlsx')
                                             if not os.path.exists(excel_path):
