@@ -7,6 +7,8 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from config.prompts import load_prompts
 from agents.serper_client import SerperClient
+import langsmith
+from langsmith.run_helpers import trackable
 
 class ConsultingAssistant:
     """
@@ -179,8 +181,8 @@ class ConsultingAssistant:
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://applicant-analysis.streamlit.app",  # Optional: Replace with your actual app URL
-            "X-Title": "Applicant Analysis Tool"  # Optional: Your application name
+            "HTTP-Referer": "https://applicant-analysis.streamlit.app",
+            "X-Title": "Applicant Analysis Tool"
         }
         
         payload = {
@@ -189,15 +191,73 @@ class ConsultingAssistant:
             "max_tokens": 1500
         }
         
-        with st.spinner(f"Generating program recommendations with {self.model_name}..."):
-            response = requests.post(self.api_url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                st.error(f"OpenRouter API Error ({self.model_name}): {response.status_code} - {response.text}")
-                return self._format_program_recommendations(fallback_programs)
+        # 在 OpenRouter 调用之前直接记录 LangSmith 元数据
+        provider = "openrouter"
+        model_name = self.model_name
+        if "/" in model_name:
+            provider = model_name.split("/")[0]
+        
+        # 直接使用 LangSmith 客户端标记此次 API 调用
+        client = langsmith.Client()
+        run_id = None
+        
+        try:
+            # 创建 LangSmith 追踪
+            with trackable(
+                run_type="llm",
+                name=f"ProgramRecommendations_{model_name}",
+                inputs={"messages": [{"role": "user", "content": prompt}]},
+                metadata={
+                    "ls_provider": provider,
+                    "ls_model_name": model_name,
+                    "programs_count": len(fallback_programs)
+                },
+                client=client,
+            ) as run:
+                run_id = run.id
+                with st.spinner(f"Generating program recommendations with {self.model_name}..."):
+                    response = requests.post(self.api_url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result["choices"][0]["message"]["content"]
+                        
+                        # 更新 LangSmith 输出
+                        run.outputs = {
+                            "response": {
+                                "choices": [
+                                    {
+                                        "message": {
+                                            "role": "assistant",
+                                            "content": content
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                        # 添加令牌计数信息（如果可用）
+                        if "usage" in result:
+                            run.outputs["usage_metadata"] = {
+                                "input_tokens": result["usage"].get("prompt_tokens", 0),
+                                "output_tokens": result["usage"].get("completion_tokens", 0),
+                                "total_tokens": result["usage"].get("total_tokens", 0)
+                            }
+                        return content
+                    else:
+                        st.error(f"OpenRouter API Error ({self.model_name}): {response.status_code} - {response.text}")
+                        error_response = self._format_program_recommendations(fallback_programs)
+                        run.outputs = {"error": response.text, "fallback_response": error_response}
+                        return error_response
+        except Exception as e:
+            # 记录异常并返回备用报告
+            st.error(f"Error in OpenRouter API call: {str(e)}")
+            error_response = self._format_program_recommendations(fallback_programs)
+            if run_id:
+                try:
+                    client.update_run(run_id, outputs={"error": str(e), "fallback_response": error_response})
+                except:
+                    pass  # 忽略更新错误
+            return error_response
     
     def _format_program_recommendations(self, programs: List[Dict[str, str]]) -> str:
         """
