@@ -607,8 +607,9 @@ def main():
 其他信息或需求：
 {other_info.strip()}
 """
+                    # 在分析区最前面显示可爱的猫 emoji
+                    st.markdown("<div style='text-align:center; font-size:60px; margin-bottom: 10px;'>🐱</div>", unsafe_allow_html=True)
                     with st.spinner("正在分析..."):
-                        st.markdown("<div style='text-align:center; font-size:48px;'>🐱</div>", unsafe_allow_html=True)
                         try:
                             tag_result = process_student_case2(student_case)
                             result = tag_result
