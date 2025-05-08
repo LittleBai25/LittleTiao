@@ -487,6 +487,13 @@ def main():
     os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
     os.environ["LANGCHAIN_PROJECT"] = "agent_case_match2"
 
+    # 在输入区域前定义业务单位
+    business_units = [
+        "新通国际", "北京中心", "成都", "福州", "广州", "杭州留学",
+        "合肥", "济南", "南昌", "南京", "宁波留学", "厦门", "山西", "深圳", "苏州",
+        "天津", "温州", "武汉", "西安", "新通温哥华", "长春", "郑州", "重庆", "舟山"
+    ]
+
     # 创建四个标签页
     system_tab1, system_tab2, system_tab3, system_tab4 = st.tabs([
         "标签匹配系统", 
@@ -567,20 +574,21 @@ def main():
 
             st.markdown("---")
 
-            # 客户背景信息
-            st.markdown("#### 客户背景信息")
-            default_background = (
-                "学生基本信息：\n"
-                "- 当前学校：\n"
-                "- 专业：\n"
-                "- 平均成绩：\n"
-                "- 语言成绩：\n"
-            )
-            background = st.text_area("请填写客户背景信息", value=default_background, height=70, key="background")
-
-            # 其他信息
-            st.markdown("#### 其他信息")
-            other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=70, key="other_info")
+            # 客户背景信息和其他信息左右显示
+            col_bg, col_other = st.columns(2)
+            with col_bg:
+                st.markdown("#### 客户背景信息")
+                default_background = (
+                    "学生基本信息：\n"
+                    "- 当前学校：\n"
+                    "- 专业：\n"
+                    "- 平均成绩：\n"
+                    "- 语言成绩：\n"
+                )
+                background = st.text_area("请填写客户背景信息", value=default_background, height=70, key="background")
+            with col_other:
+                st.markdown("#### 其他信息")
+                other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=70, key="other_info")
 
             st.markdown("---")
 
