@@ -574,7 +574,7 @@ def main():
 
             st.markdown("---")
 
-            # 客户背景信息和其他信息左右显示
+            # 客户背景信息和其他信息左右显示，输入框高度调大
             col_bg, col_other = st.columns(2)
             with col_bg:
                 st.markdown("#### 客户背景信息")
@@ -585,23 +585,20 @@ def main():
                     "- 平均成绩：\n"
                     "- 语言成绩：\n"
                 )
-                background = st.text_area("请填写客户背景信息", value=default_background, height=70, key="background")
+                background = st.text_area("请填写客户背景信息", value=default_background, height=130, key="background")
             with col_other:
                 st.markdown("#### 其他信息")
-                other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=70, key="other_info")
+                other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=130, key="other_info")
 
             st.markdown("---")
 
-            # 业务单位和个性服务指南选项
-            col5, col6 = st.columns([2, 1])
-            with col5:
-                selected_unit = st.selectbox(
-                    "请选择业务单位",
-                    options=business_units,
-                    index=0
-                )
-            with col6:
-                generate_service_guide = st.checkbox("生成个性服务指南", value=True)
+            # 业务单位选择和生成个性服务指南分两行
+            selected_unit = st.selectbox(
+                "请选择业务单位",
+                options=business_units,
+                index=0
+            )
+            generate_service_guide = st.checkbox("生成个性服务指南", value=True)
 
             # 校验必填项
             if st.button("开始分析", key="start_analysis"):
