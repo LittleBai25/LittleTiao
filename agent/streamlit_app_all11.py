@@ -605,11 +605,14 @@ def main():
 """
                     with st.spinner("正在分析学生案例..."):
                         try:
-                            thinking_process = st.empty()
+                            if 'process_expanded' not in st.session_state:
+                                st.session_state.process_expanded = True
+                            else:
+                                st.session_state.process_expanded = True  # 每次点击分析前都展开
                             process_container = st.container()
                             with process_container:
                                 st.subheader("🤔 分析过程")
-                                thinking_area = st.expander("查看详细分析过程", expanded=True)
+                                thinking_area = st.expander("查看详细分析过程", expanded=st.session_state.process_expanded)
                                 with thinking_area:
                                     process_placeholder = st.empty()
                                     messages = []
