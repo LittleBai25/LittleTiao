@@ -540,69 +540,68 @@ def main():
                 st.session_state.points_extractor = None
             
             # 添加选项卡来切换输入方式
-            input_tab1, = st.tabs(["手动输入"])
+            # input_tab1, = st.tabs(["手动输入"])
             
+            # 删除 input_tab1 = st.tabs(["手动输入"]) 和 with input_tab1:，将其内部内容直接放在 system_tab1 下。
 
-            with input_tab1:
-                st.subheader("客户基本信息")
-                # 第一行：预计入学时间、申请国家、申请专业、留学类别
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    year = st.selectbox("入学年份", [str(y) for y in range(2024, 2035)], key="year", index=0)
-                with col2:
-                    season = st.selectbox("入学季节", ["春", "夏", "秋", "冬"], key="season", index=0)
-                with col3:
-                    country = st.text_input("申请国家", key="country")
-                with col4:
-                    major = st.text_input("申请专业", key="major")
+            # 第一行：预计入学时间、申请国家、申请专业、留学类别
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                year = st.selectbox("入学年份", [str(y) for y in range(2024, 2035)], key="year", index=0)
+            with col2:
+                season = st.selectbox("入学季节", ["春", "夏", "秋", "冬"], key="season", index=0)
+            with col3:
+                country = st.text_input("申请国家", key="country")
+            with col4:
+                major = st.text_input("申请专业", key="major")
 
-                # 第二行：留学类别
-                study_type = st.selectbox(
-                    "留学类别",
-                    [
-                        "学前", "小学", "初中", "高中", "大学预科", "大专文凭", "硕士预科", "本科文凭",
-                        "大学转学分课程", "学士学位", "副学士学位", "硕士学位", "授课类硕士", "研究类硕士", "博士学位"
-                    ],
-                    key="study_type"
+            # 第二行：留学类别
+            study_type = st.selectbox(
+                "留学类别",
+                [
+                    "学前", "小学", "初中", "高中", "大学预科", "大专文凭", "硕士预科", "本科文凭",
+                    "大学转学分课程", "学士学位", "副学士学位", "硕士学位", "授课类硕士", "研究类硕士", "博士学位"
+                ],
+                key="study_type"
+            )
+
+            st.markdown("---")
+
+            # 客户背景信息
+            st.markdown("#### 客户背景信息")
+            default_background = (
+                "学生基本信息：\n"
+                "- 当前学校：\n"
+                "- 专业：\n"
+                "- 平均成绩：\n"
+                "- 语言成绩：\n"
+            )
+            background = st.text_area("请填写客户背景信息", value=default_background, height=70, key="background")
+
+            # 其他信息
+            st.markdown("#### 其他信息")
+            other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=70, key="other_info")
+
+            st.markdown("---")
+
+            # 业务单位和个性服务指南选项
+            col5, col6 = st.columns([2, 1])
+            with col5:
+                selected_unit = st.selectbox(
+                    "请选择业务单位",
+                    options=business_units,
+                    index=0
                 )
+            with col6:
+                generate_service_guide = st.checkbox("生成个性服务指南", value=True)
 
-                st.markdown("---")
-
-                # 客户背景信息
-                st.markdown("#### 客户背景信息")
-                default_background = (
-                    "学生基本信息：\n"
-                    "- 当前学校：\n"
-                    "- 专业：\n"
-                    "- 平均成绩：\n"
-                    "- 语言成绩：\n"
-                )
-                background = st.text_area("请填写客户背景信息", value=default_background, height=60, key="background")
-
-                # 其他信息
-                st.markdown("#### 其他信息")
-                other_info = st.text_area('如该部分信息为空，小助理不会输出"个性化服务指南"', height=40, key="other_info")
-
-                st.markdown("---")
-
-                # 业务单位和个性服务指南选项
-                col5, col6 = st.columns([2, 1])
-                with col5:
-                    selected_unit = st.selectbox(
-                        "请选择业务单位",
-                        options=business_units,
-                        index=0
-                    )
-                with col6:
-                    generate_service_guide = st.checkbox("生成个性服务指南", value=True)
-
-                # 校验必填项
-                if st.button("开始分析", key="start_analysis"):
-                    if not (year and season and country and major and study_type and background.strip()):
-                        st.warning("请填写所有必填项！")
-                    else:
-                        # 组装 student_case 字符串，传递给后续处理逻辑
-                        student_case = f"""
+            # 校验必填项
+            if st.button("开始分析", key="start_analysis"):
+                if not (year and season and country and major and study_type and background.strip()):
+                    st.warning("请填写所有必填项！")
+                else:
+                    # 组装 student_case 字符串，传递给后续处理逻辑
+                    student_case = f"""
 学生基本信息：
 {background.strip()}
 
@@ -615,173 +614,173 @@ def main():
 其他信息或需求：
 {other_info.strip()}
 """
-                        with st.spinner("正在分析学生案例..."):
-                            try:
-                                thinking_process = st.empty()
-                                process_container = st.container()
-                                with process_container:
-                                    st.subheader("🤔 分析过程")
-                                    thinking_area = st.expander("查看详细分析过程", expanded=True)
-                                    with thinking_area:
-                                        process_placeholder = st.empty()
-                                        messages = []
-                                        def update_process(message):
-                                            messages.append(message)
-                                            process_placeholder.markdown("\n\n".join(messages))
-                                        update_process("🔍 开始分析学生案例...")
-                                        update_process("1️⃣ 提取关键信息...")
-                                        tag_result = process_student_case2(student_case, callback=update_process)
-                                        result = tag_result
-                                        if generate_service_guide and tag_result["status"] == "success" and other_info.strip():
-                                            update_process("2️⃣ 生成个性服务指南...")
-                                            excel_path = os.path.join(os.path.dirname(__file__), '服务指南.xlsx')
-                                            if not os.path.exists(excel_path):
-                                                update_process("⚠️ 服务指南Excel文件不存在，只生成标签")
-                                            else:
-                                                update_process("3️⃣ 根据标签生成个性服务指南...")
-                                                backstory = st.session_state.get('service_guide_backstory', prompt_templates.get_template('service_guide_backstory'))
-                                                task = st.session_state.get('service_guide_task', prompt_templates.get_template('service_guide_task'))
-                                                output = st.session_state.get('service_guide_output', prompt_templates.get_template('service_guide_output'))
-                                                formatted_task = task.format(student_info=student_case)
-                                                guide_prompt = f"{backstory}\n\n{formatted_task}\n\n{output}"
-                                                try:
-                                                    guide_result = process_student_case_with_guide(
-                                                        student_case,
-                                                        guide_prompt,
-                                                        excel_path
-                                                    )
-                                                    if isinstance(guide_result, dict) and 'service_guide' in guide_result:
-                                                        result['service_guide'] = guide_result['service_guide']
-                                                    else:
-                                                        result['service_guide'] = "无法生成服务指南"
-                                                except Exception as e:
-                                                    update_process(f"⚠️ 生成服务指南时出错: {str(e)}")
-                                                    result['service_guide'] = f"生成服务指南出错: {str(e)}"
-                                        update_process("✅ 分析完成！")
-                                if result["status"] == "success":
+                    with st.spinner("正在分析学生案例..."):
+                        try:
+                            thinking_process = st.empty()
+                            process_container = st.container()
+                            with process_container:
+                                st.subheader("🤔 分析过程")
+                                thinking_area = st.expander("查看详细分析过程", expanded=True)
+                                with thinking_area:
+                                    process_placeholder = st.empty()
+                                    messages = []
+                                    def update_process(message):
+                                        messages.append(message)
+                                        process_placeholder.markdown("\n\n".join(messages))
+                                    update_process("🔍 开始分析学生案例...")
+                                    update_process("1️⃣ 提取关键信息...")
+                                    tag_result = process_student_case2(student_case, callback=update_process)
+                                    result = tag_result
+                                    if generate_service_guide and tag_result["status"] == "success" and other_info.strip():
+                                        update_process("2️⃣ 生成个性服务指南...")
+                                        excel_path = os.path.join(os.path.dirname(__file__), '服务指南.xlsx')
+                                        if not os.path.exists(excel_path):
+                                            update_process("⚠️ 服务指南Excel文件不存在，只生成标签")
+                                        else:
+                                            update_process("3️⃣ 根据标签生成个性服务指南...")
+                                            backstory = st.session_state.get('service_guide_backstory', prompt_templates.get_template('service_guide_backstory'))
+                                            task = st.session_state.get('service_guide_task', prompt_templates.get_template('service_guide_task'))
+                                            output = st.session_state.get('service_guide_output', prompt_templates.get_template('service_guide_output'))
+                                            formatted_task = task.format(student_info=student_case)
+                                            guide_prompt = f"{backstory}\n\n{formatted_task}\n\n{output}"
+                                            try:
+                                                guide_result = process_student_case_with_guide(
+                                                    student_case,
+                                                    guide_prompt,
+                                                    excel_path
+                                                )
+                                                if isinstance(guide_result, dict) and 'service_guide' in guide_result:
+                                                    result['service_guide'] = guide_result['service_guide']
+                                                else:
+                                                    result['service_guide'] = "无法生成服务指南"
+                                            except Exception as e:
+                                                update_process(f"⚠️ 生成服务指南时出错: {str(e)}")
+                                                result['service_guide'] = f"生成服务指南出错: {str(e)}"
+                                    update_process("✅ 分析完成！")
+                            if result["status"] == "success":
+                                
+                                # 显示原始输出（放在可展开的部分中）
+                                with st.expander("查看原始输出（调试用）", expanded=False):
+                                    st.subheader("模型输出结果")
+                                    st.code(result["raw_output"], language="json")
+                                
+                                # 处理模型输出
+                                try:
+                                    # 清理和解析JSON部分
+                                    json_str = result["raw_output"]
                                     
-                                    # 显示原始输出（放在可展开的部分中）
-                                    with st.expander("查看原始输出（调试用）", expanded=False):
-                                        st.subheader("模型输出结果")
-                                        st.code(result["raw_output"], language="json")
+                                    # 1. 提取JSON部分（第一个 { 到对应的 } 之间的内容）
+                                    output_dict = safe_extract_recommended_tags(json_str)
                                     
-                                    # 处理模型输出
+                                    # 显示标签匹配结果
+                                    st.subheader("📊 分析结果")
+                                    
+                                    # 创建两列布局
+                                    col1, col2 = st.columns(2)
+                                    
+                                    with col1:
+                                        st.write("🎯 **匹配标签**")
+                                        if "recommended_tags" in output_dict:
+                                            tags = output_dict["recommended_tags"]
+                                            
+                                            # 显示国家标签
+                                            if tags.get("countries"):
+                                                st.write("**国家标签：**", ", ".join(tags["countries"]))
+                                                
+                                            # 显示专业标签
+                                            if tags.get("majors"):
+                                                st.write("**专业标签：**", ", ".join(tags["majors"]))
+                                                
+                                            # 显示其他重要标签
+                                            if tags.get("schoolLevel"):
+                                                st.write("**院校层次：**", ", ".join(tags["schoolLevel"]))
+                                                
+                                            if tags.get("SpecialProjects"):
+                                                st.write("**特殊项目：**", ", ".join(tags["SpecialProjects"]))
+                                    
+                                    with col2:
+                                        # 显示其他标签
+                                        if "recommended_tags" in output_dict:
+                                            tags = output_dict["recommended_tags"]
+                                            
+                                            if tags.get("Industryexperience"):
+                                                st.write("**行业经验：**", ", ".join(tags["Industryexperience"]))
+                                                
+                                            if tags.get("Consultantbackground"):
+                                                st.write("**顾问背景：**", ", ".join(tags["Consultantbackground"]))
+                                                
+                                            if tags.get("businessLocation"):
+                                                st.write("**业务单位所在地：**", ", ".join(tags["businessLocation"]))
+                                                
+                          
+
+                                    # 显示个性服务指南结果
+                                    if 'service_guide' in result:
+                                        st.subheader("📝 个性服务指南")
+                                        st.markdown(result['service_guide'])
+                                        
+                                    # 修改创建DataFrame的部分
+                                    df = pd.DataFrame({
+                                        "文案顾问业务单位": [selected_unit],  # 使用选择的业务单位
+                                        "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
+                                        "专业标签": [', '.join(output_dict["recommended_tags"]["majors"])],
+                                        "名校专家": [', '.join(output_dict["recommended_tags"]["schoolLevel"])],
+                                        "特殊项目标签": [', '.join(output_dict["recommended_tags"]["SpecialProjects"])],
+                                        "行业经验": [', '.join(output_dict["recommended_tags"]["Industryexperience"])],
+                                        "文案背景": [', '.join(output_dict["recommended_tags"]["Consultantbackground"])],
+                                        "业务单位所在地": [', '.join(output_dict["recommended_tags"]["businessLocation"])],
+                                    })
+                                    
+                                    # 存入session_state
+                                    st.session_state.tagged_data = df
+                                    
+                                    update_process("🔄 使用算法提取操作要点...")
+
                                     try:
-                                        # 清理和解析JSON部分
-                                        json_str = result["raw_output"]
-                                        
-                                        # 1. 提取JSON部分（第一个 { 到对应的 } 之间的内容）
-                                        output_dict = safe_extract_recommended_tags(json_str)
-                                        
-                                        # 显示标签匹配结果
-                                        st.subheader("📊 分析结果")
-                                        
-                                        # 创建两列布局
-                                        col1, col2 = st.columns(2)
-                                        
-                                        with col1:
-                                            st.write("🎯 **匹配标签**")
-                                            if "recommended_tags" in output_dict:
-                                                tags = output_dict["recommended_tags"]
-                                                
-                                                # 显示国家标签
-                                                if tags.get("countries"):
-                                                    st.write("**国家标签：**", ", ".join(tags["countries"]))
-                                                    
-                                                # 显示专业标签
-                                                if tags.get("majors"):
-                                                    st.write("**专业标签：**", ", ".join(tags["majors"]))
-                                                    
-                                                # 显示其他重要标签
-                                                if tags.get("schoolLevel"):
-                                                    st.write("**院校层次：**", ", ".join(tags["schoolLevel"]))
-                                                    
-                                                if tags.get("SpecialProjects"):
-                                                    st.write("**特殊项目：**", ", ".join(tags["SpecialProjects"]))
-                                        
-                                        with col2:
-                                            # 显示其他标签
-                                            if "recommended_tags" in output_dict:
-                                                tags = output_dict["recommended_tags"]
-                                                
-                                                if tags.get("Industryexperience"):
-                                                    st.write("**行业经验：**", ", ".join(tags["Industryexperience"]))
-                                                    
-                                                if tags.get("Consultantbackground"):
-                                                    st.write("**顾问背景：**", ", ".join(tags["Consultantbackground"]))
-                                                    
-                                                if tags.get("businessLocation"):
-                                                    st.write("**业务单位所在地：**", ", ".join(tags["businessLocation"]))
-                                                    
-                              
-
-                                        # 显示个性服务指南结果
-                                        if 'service_guide' in result:
-                                            st.subheader("📝 个性服务指南")
-                                            st.markdown(result['service_guide'])
-                                        
-                                        # 修改创建DataFrame的部分
-                                        df = pd.DataFrame({
-                                            "文案顾问业务单位": [selected_unit],  # 使用选择的业务单位
-                                            "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
-                                            "专业标签": [', '.join(output_dict["recommended_tags"]["majors"])],
-                                            "名校专家": [', '.join(output_dict["recommended_tags"]["schoolLevel"])],
-                                            "特殊项目标签": [', '.join(output_dict["recommended_tags"]["SpecialProjects"])],
-                                            "行业经验": [', '.join(output_dict["recommended_tags"]["Industryexperience"])],
-                                            "文案背景": [', '.join(output_dict["recommended_tags"]["Consultantbackground"])],
-                                            "业务单位所在地": [', '.join(output_dict["recommended_tags"]["businessLocation"])],
-                                        })
-                                        
-                                        # 存入session_state
-                                        st.session_state.tagged_data = df
-                                        
-                                        update_process("🔄 使用算法提取操作要点...")
-
-                                        try:
-                                            ai_country_tag=df["国家标签"]
-                                            ai_major_tag=df["专业标签"]
-                                            logger.info(f"ai_country_tag: {ai_country_tag}")
-                                            logger.info(f"ai_major_tag: {ai_major_tag}")
-                                            points_extractor=OperationPointsExtractor(excel_path)
-                                            # 使用操作要点提取器，传入AI提取的标签
-                                            operation_points = points_extractor.get_operation_points(
-                                                student_case,
-                                                ai_country_tag,
-                                                ai_major_tag
-                                            )
-
-                                            result['operation_points'] = operation_points
-                                            update_process("✅ 算法提取操作要点完成")
-                                        except Exception as e:
-                                            update_process(f"⚠️ 算法提取操作要点出错: {str(e)}")
-                                        if 'operation_points' in result:
-                                            st.subheader("📝 操作要点")
-                                            st.markdown(result['operation_points'])
-
-                                        # 将DataFrame显示放在可展开的部分中
-                                        with st.expander("查看标签数据表格", expanded=False):
-                                            st.dataframe(df)
-                                        
-                                        # 保存交互记录
-                                        save_interaction(
-                                            input_text=student_case,
-                                            output_result=result,
-                                            business_unit=selected_unit,
-                                            interaction_type="tag_matching"
+                                        ai_country_tag=df["国家标签"]
+                                        ai_major_tag=df["专业标签"]
+                                        logger.info(f"ai_country_tag: {ai_country_tag}")
+                                        logger.info(f"ai_major_tag: {ai_major_tag}")
+                                        points_extractor=OperationPointsExtractor(excel_path)
+                                        # 使用操作要点提取器，传入AI提取的标签
+                                        operation_points = points_extractor.get_operation_points(
+                                            student_case,
+                                            ai_country_tag,
+                                            ai_major_tag
                                         )
-                                        
-                                        st.success("✅ 数据已处理并保存到内存中，可用于后续匹配")
 
+                                        result['operation_points'] = operation_points
+                                        update_process("✅ 算法提取操作要点完成")
                                     except Exception as e:
-                                        st.error(f"处理模型输出时出错: {str(e)}")
-                                        st.error("请检查模型输出格式是否符合预期")
-                                        # 显示原始输出以便调试
-                                        with st.expander("查看原始输出", expanded=False):
-                                            st.code(result["raw_output"])
-                            
-                            except Exception as e:
-                                st.error(f"处理过程中出错: {str(e)}")
+                                        update_process(f"⚠️ 算法提取操作要点出错: {str(e)}")
+                                    if 'operation_points' in result:
+                                        st.subheader("📝 操作要点")
+                                        st.markdown(result['operation_points'])
+
+                                    # 将DataFrame显示放在可展开的部分中
+                                    with st.expander("查看标签数据表格", expanded=False):
+                                        st.dataframe(df)
+                                    
+                                    # 保存交互记录
+                                    save_interaction(
+                                        input_text=student_case,
+                                        output_result=result,
+                                        business_unit=selected_unit,
+                                        interaction_type="tag_matching"
+                                    )
+                                    
+                                    st.success("✅ 数据已处理并保存到内存中，可用于后续匹配")
+
+                                except Exception as e:
+                                    st.error(f"处理模型输出时出错: {str(e)}")
+                                    st.error("请检查模型输出格式是否符合预期")
+                                    # 显示原始输出以便调试
+                                    with st.expander("查看原始输出", expanded=False):
+                                        st.code(result["raw_output"])
                         
+                        except Exception as e:
+                            st.error(f"处理过程中出错: {str(e)}")
+                    
         except Exception as e:
             logger.error(f"配置初始化失败: {str(e)}")
             st.error(f"配置初始化失败: {str(e)}")
