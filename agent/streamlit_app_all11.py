@@ -716,8 +716,6 @@ def main():
                                             st.markdown(result['service_guide'])
                                         
                                         # 修改创建DataFrame的部分
-                                        st.write('DEBUG df countries:', output_dict["recommended_tags"]["countries"])
-                                        st.write('DEBUG df majors:', output_dict["recommended_tags"]["majors"])
                                         df = pd.DataFrame({
                                             "文案顾问业务单位": [selected_unit],  # 使用选择的业务单位
                                             "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
