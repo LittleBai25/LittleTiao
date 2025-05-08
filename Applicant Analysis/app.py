@@ -38,6 +38,7 @@ def init_langsmith():
             os.environ["LANGCHAIN_API_KEY"] = langsmith_api_key
             os.environ["LANGCHAIN_PROJECT"] = langsmith_project
             os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGSMITH_TRACING_V2"] = "true"
             return True
         return False
     except Exception as e:
