@@ -443,13 +443,19 @@ def safe_extract_recommended_tags(raw_output):
             for zh_or_en, en in field_map.items():
                 if zh_or_en in tags:
                     norm_tags[en] = tags[zh_or_en]
-            # 补全所有字段
+            # 补全所有字段并类型强制
             for key in [
                 "countries", "majors", "schoolLevel", "SpecialProjects",
                 "Industryexperience", "Consultantbackground", "businessLocation"
             ]:
-                if key not in norm_tags:
-                    norm_tags[key] = []
+                val = norm_tags.get(key, [])
+                if not isinstance(val, list):
+                    if val is None:
+                        norm_tags[key] = []
+                    else:
+                        norm_tags[key] = [str(val)]
+                else:
+                    norm_tags[key] = val
             return {"recommended_tags": norm_tags}
     except Exception as e:
         pass
@@ -722,6 +728,8 @@ def main():
                                             st.markdown(result['service_guide'])
                                         
                                         # 修改创建DataFrame的部分
+                                        st.write('DEBUG df countries:', output_dict["recommended_tags"]["countries"])
+                                        st.write('DEBUG df majors:', output_dict["recommended_tags"]["majors"])
                                         df = pd.DataFrame({
                                             "文案顾问业务单位": [selected_unit],  # 使用选择的业务单位
                                             "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
