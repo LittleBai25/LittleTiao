@@ -108,22 +108,60 @@ SUPPORTED_MODELS = [
 @traceable(run_type="chain", name="CompetitivenessAnalysis")
 def generate_competitiveness_report(analyst, university, major, predicted_degree, transcript_content, custom_requirements=""):
     """追踪竞争力分析报告的生成过程"""
-    return analyst.generate_report(
-        university=university,
-        major=major,
-        predicted_degree=predicted_degree,
-        transcript_content=transcript_content,
-        custom_requirements=custom_requirements
-    )
+    # 添加模型信息到元数据
+    model_name = analyst.model_name
+    # 尝试从模型名称中提取提供商
+    provider = "openrouter"
+    if "/" in model_name:
+        provider = model_name.split("/")[0]
+        
+    metadata = {
+        "ls_provider": provider,
+        "ls_model_name": model_name
+    }
+    
+    # 使用带元数据的装饰器
+    from langsmith import traceable as traceable_with_metadata
+    
+    @traceable_with_metadata(run_type="llm", name="ModelCall", metadata=metadata)
+    def _generate_report():
+        return analyst.generate_report(
+            university=university,
+            major=major,
+            predicted_degree=predicted_degree,
+            transcript_content=transcript_content,
+            custom_requirements=custom_requirements
+        )
+    
+    return _generate_report()
 
 # 使用LangSmith追踪咨询助手推荐项目的函数
 @traceable(run_type="chain", name="ProgramRecommendations")
 def generate_program_recommendations(consultant, competitiveness_report, custom_requirements=""):
     """追踪项目推荐的生成过程"""
-    return consultant.recommend_projects(
-        competitiveness_report=competitiveness_report,
-        custom_requirements=custom_requirements
-    )
+    # 添加模型信息到元数据
+    model_name = consultant.model_name
+    # 尝试从模型名称中提取提供商
+    provider = "openrouter"
+    if "/" in model_name:
+        provider = model_name.split("/")[0]
+        
+    metadata = {
+        "ls_provider": provider,
+        "ls_model_name": model_name
+    }
+    
+    # 使用带元数据的装饰器
+    from langsmith import traceable as traceable_with_metadata
+    
+    @traceable_with_metadata(run_type="llm", name="ModelCall", metadata=metadata)
+    def _recommend_projects():
+        return consultant.recommend_projects(
+            competitiveness_report=competitiveness_report,
+            custom_requirements=custom_requirements
+        )
+    
+    return _recommend_projects()
 
 # 创建Word文档报告并提供下载
 def create_downloadable_report(report_title, report_content):
