@@ -10,8 +10,6 @@ from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from config.prompts import load_prompts
-import langsmith
-from langsmith.run_helpers import trackable
 
 class CompetitivenessAnalyst:
     """
@@ -145,69 +143,30 @@ class CompetitivenessAnalyst:
         if "/" in model_name:
             provider = model_name.split("/")[0]
         
-        # 直接使用 LangSmith 客户端标记此次 API 调用
-        client = langsmith.Client()
-        run_id = None
+        # 创建初始输入数据
+        input_data = {"messages": [{"role": "user", "content": prompt}]}
         
-        try:
-            # 创建 LangSmith 追踪
-            with trackable(
-                run_type="llm",
-                name=f"CompetitivenessAnalysis_{model_name}",
-                inputs={"messages": [{"role": "user", "content": prompt}]},
-                metadata={
-                    "ls_provider": provider,
-                    "ls_model_name": model_name,
-                    "university": university,
-                    "major": major,
-                    "predicted_degree": predicted_degree
-                },
-                client=client,
-            ) as run:
-                run_id = run.id
-                with st.spinner(f"Generating competitiveness report with {self.model_name}..."):
-                    response = requests.post(self.api_url, headers=headers, json=payload)
+        with st.spinner(f"Generating competitiveness report with {self.model_name}..."):
+            # 使用更简单的方法追踪 - 避免使用 Client/trace
+            try:
+                # 直接发送请求，不使用 trace
+                response = requests.post(self.api_url, headers=headers, json=payload)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result["choices"][0]["message"]["content"]
                     
-                    if response.status_code == 200:
-                        result = response.json()
-                        content = result["choices"][0]["message"]["content"]
-                        
-                        # 更新 LangSmith 输出
-                        run.outputs = {
-                            "response": {
-                                "choices": [
-                                    {
-                                        "message": {
-                                            "role": "assistant",
-                                            "content": content
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                        # 添加令牌计数信息（如果可用）
-                        if "usage" in result:
-                            run.outputs["usage_metadata"] = {
-                                "input_tokens": result["usage"].get("prompt_tokens", 0),
-                                "output_tokens": result["usage"].get("completion_tokens", 0),
-                                "total_tokens": result["usage"].get("total_tokens", 0)
-                            }
-                        return content
-                    else:
-                        st.error(f"OpenRouter API Error ({self.model_name}): {response.status_code} - {response.text}")
-                        error_report = self._get_mock_report(university, major, predicted_degree)
-                        run.outputs = {"error": response.text, "fallback_response": error_report}
-                        return error_report
-        except Exception as e:
-            # 记录异常并返回备用报告
-            st.error(f"Error in OpenRouter API call: {str(e)}")
-            error_report = self._get_mock_report(university, major, predicted_degree)
-            if run_id:
-                try:
-                    client.update_run(run_id, outputs={"error": str(e), "fallback_response": error_report})
-                except:
-                    pass  # 忽略更新错误
-            return error_report
+                    # 手动记录到 LangSmith，如果有需要
+                    # 这里可以添加代码将模型使用信息记录到其他地方
+                    
+                    return content
+                else:
+                    st.error(f"OpenRouter API Error ({self.model_name}): {response.status_code} - {response.text}")
+                    return self._get_mock_report(university, major, predicted_degree)
+            except Exception as e:
+                # 处理异常
+                st.error(f"Error in OpenRouter API call: {str(e)}")
+                return self._get_mock_report(university, major, predicted_degree)
     
     def _get_mock_report(self, university: str, major: str, predicted_degree: str) -> str:
         """
