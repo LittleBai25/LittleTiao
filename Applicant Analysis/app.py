@@ -17,8 +17,7 @@ from agents.serper_client import SerperClient
 from config.prompts import load_prompts, save_prompts
 
 # 导入LangSmith追踪功能
-from langsmith import Client
-from langsmith.run_helpers import traceable
+from langsmith import traceable
 
 # Set page configuration
 st.set_page_config(
