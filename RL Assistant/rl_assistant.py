@@ -42,7 +42,14 @@ if langsmith_api_key:
         projects = langsmith_client.list_projects()
         project_names = [p.name for p in projects]
         if langsmith_project not in project_names:
-            langsmith_client.create_project(langsmith_project)
+            try:
+                langsmith_client.create_project(langsmith_project)
+            except Exception as e:
+                # 只要是已存在的冲突就忽略
+                if "409" in str(e) or "already exists" in str(e):
+                    pass
+                else:
+                    st.warning(f"LangSmith项目创建失败: {str(e)}")
     except Exception as e:
         st.warning(f"LangSmith初始化失败: {str(e)}")
 
