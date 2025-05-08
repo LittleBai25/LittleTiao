@@ -413,49 +413,32 @@ def safe_extract_recommended_tags(raw_output):
             json_part = raw_output[start_idx:end_idx + 1]
             json_part = json_part.replace('```json', '').replace('```', '').strip()
             output_dict = json.loads(json_part)
-            # 兼容 recommended_tag / recommended_tags
+            # 只认AI的输出格式
             tags = None
-            if "recommended_tags" in output_dict:
-                tags = output_dict["recommended_tags"]
-            elif "recommended_tag" in output_dict:
+            if "recommended_tag" in output_dict:
                 tags = output_dict["recommended_tag"]
+            elif "recommended_tags" in output_dict:
+                tags = output_dict["recommended_tags"]
             else:
                 tags = output_dict
-            # 字段名映射
-            field_map = {
-                "country": "countries",
-                "major": "majors",
-                "schoolLevel": "schoolLevel",
-                "SpecialProject": "SpecialProjects",
-                "Industryexperience": "Industryexperience",
-                "Consultantbackground": "Consultantbackground",
-                "businessLocation": "businessLocation",
-                # 兼容中文
-                "国家标签": "countries",
-                "专业标签": "majors",
-                "院校层次标签": "schoolLevel",
-                "特殊项目标签": "SpecialProjects",
-                "行业经验": "Industryexperience",
-                "顾问背景标签": "Consultantbackground",
-                "业务所在地标签": "businessLocation"
+            # 只认AI的字段名，强制映射为页面字段
+            norm_tags = {
+                "countries": tags.get("country", []),
+                "majors": tags.get("major", []),
+                "schoolLevel": tags.get("schoolLevel", []),
+                "SpecialProjects": tags.get("SpecialProject", []),
+                "Industryexperience": tags.get("Industryexperience", []),
+                "Consultantbackground": tags.get("Consultantbackground", []),
+                "businessLocation": tags.get("businessLocation", [])
             }
-            norm_tags = {}
-            for zh_or_en, en in field_map.items():
-                if zh_or_en in tags:
-                    norm_tags[en] = tags[zh_or_en]
-            # 补全所有字段并类型强制
-            for key in [
-                "countries", "majors", "schoolLevel", "SpecialProjects",
-                "Industryexperience", "Consultantbackground", "businessLocation"
-            ]:
-                val = norm_tags.get(key, [])
+            # 类型强制
+            for key in norm_tags:
+                val = norm_tags[key]
                 if not isinstance(val, list):
                     if val is None:
                         norm_tags[key] = []
                     else:
                         norm_tags[key] = [str(val)]
-                else:
-                    norm_tags[key] = val
             return {"recommended_tags": norm_tags}
     except Exception as e:
         pass
