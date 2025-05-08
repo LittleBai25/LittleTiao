@@ -491,159 +491,106 @@ def main():
 
             with input_tab1:
                 st.subheader("客户基本信息")
-                input_col,ref_col1,ref_col2,ref_col3,ref_col4 = st.columns([7,1,1,1,1])
+                # 预计入学时间
+                col1, col2 = st.columns(2)
+                with col1:
+                    year = st.selectbox("预计入学年份", [str(y) for y in range(2024, 2035)], key="year", index=0)
+                with col2:
+                    season = st.selectbox("预计入学季节", ["春", "夏", "秋", "冬"], key="season", index=0)
 
-                with input_col:
-                    default_template = """
-                    学生基本信息：
-                    - 当前学校：
-                    - 专业：
-                    - 平均成绩：
-                    - 语言成绩：
+                # 申请国家
+                country = st.text_input("申请国家", key="country")
+                # 申请专业
+                major = st.text_input("申请专业", key="major")
+                # 留学类别
+                study_type = st.selectbox(
+                    "留学类别",
+                    [
+                        "学前", "小学", "初中", "高中", "大学预科", "大专文凭", "硕士预科", "本科文凭",
+                        "大学转学分课程", "学士学位", "副学士学位", "硕士学位", "授课类硕士", "研究类硕士", "博士学位"
+                    ],
+                    key="study_type"
+                )
+                # 客户背景信息
+                default_background = (
+                    "学生基本信息：\n"
+                    "- 当前学校：\n"
+                    "- 专业：\n"
+                    "- 平均成绩：\n"
+                    "- 语言成绩：\n"
+                )
+                background = st.text_area("客户背景信息", value=default_background, height=120, key="background")
+                # 其他信息
+                other_info = st.text_area('其他信息（如该部分信息为空，小助理不会输出"个性化服务指南"）', height=80, key="other_info")
 
-                    申请意向：
-                    - 申请国家：
-                    - 申请专业：
-                    - 留学类别：
-                    - 时间规划：
-
-                    其他信息或需求：
-                    - 
-                    """
-                    # 添加文本输入区域
-                    student_case = st.text_area(
-                        "请输入学生案例信息，留学类别必须从右边留学类别列表中选择",
-                        height=300,
-                        value=default_template
-                    )
-
-                    with ref_col1:
-                        
-                        st.code("小学", language=None)
-                        st.code("初中", language=None)
-                        st.code("高中", language=None)
-                        st.code("高中预科", language=None)
-                        st.code("学前", language=None)
-                    with ref_col2:
-                        st.code("证书课程", language=None)
-                        st.code("语言", language=None)
-                        st.code("大学预科", language=None)
-                        st.code("大专文凭", language=None)
-                        st.code("硕士预科", language=None)
-                    with ref_col3:
-                        st.code("本科文凭", language=None)
-                        st.code("大学转学分课程", language=None)
-                        st.code("研究生预科", language=None)
-                        st.code("研究生文凭", language=None)
-                        st.code("学士学位", language=None)
-                    with ref_col4:
-                        st.code("副学士学位", language=None)
-                        st.code("博士学位", language=None)
-                        st.code("硕士学位", language=None)
-                        st.code("授课类硕士", language=None)
-                        st.code("研究类硕士", language=None)
-                                                
-                        
                 # 添加业务单位选择框
                 business_units = [
-                    "新通国际", 
-                    "北京中心", 
-                    "成都", 
-                    "福州", 
-                    "广州", 
-                    "杭州留学",
-                    "合肥",
-                    "济南",
-                    "南昌",
-                    "南京",
-                    "宁波留学",
-                    "厦门",
-                    "山西",
-                    "深圳",
-                    "苏州",
-                    "天津",
-                    "温州",
-                    "武汉",
-                    "西安",
-                    "新通温哥华",
-                    "长春",
-                    "郑州",
-                    "重庆",
-                    "舟山"
+                    "新通国际", "北京中心", "成都", "福州", "广州", "杭州留学",
+                    "合肥", "济南", "南昌", "南京", "宁波留学", "厦门", "山西", "深圳", "苏州",
+                    "天津", "温州", "武汉", "西安", "新通温哥华", "长春", "郑州", "重庆", "舟山"
                 ]
-
                 selected_unit = st.selectbox(
                     "请选择业务单位",
                     options=business_units,
-                    index=0  # 默认选择第一个选项
+                    index=0
                 )
-                
                 # 添加选项让用户选择是否生成个性服务指南
                 generate_service_guide = st.checkbox("生成个性服务指南", value=True)
-                
-                # 添加处理按钮
-                if st.button("开始分析", key="start_analysis") :
-                    if student_case:
+
+                # 校验必填项
+                if st.button("开始分析", key="start_analysis"):
+                    if not (year and season and country and major and study_type and background.strip()):
+                        st.warning("请填写所有必填项！")
+                    else:
+                        # 组装 student_case 字符串，传递给后续处理逻辑
+                        student_case = f"""
+学生基本信息：
+{background.strip()}
+
+申请意向：
+- 申请国家：{country}
+- 申请专业：{major}
+- 留学类别：{study_type}
+- 时间规划：{year}年{season}季
+
+其他信息或需求：
+{other_info.strip()}
+"""
                         with st.spinner("正在分析学生案例..."):
                             try:
-                                # 创建一个展示区来显示处理过程
                                 thinking_process = st.empty()
                                 process_container = st.container()
-                                
                                 with process_container:
                                     st.subheader("🤔 分析过程")
                                     thinking_area = st.expander("查看详细分析过程", expanded=True)
-                                    
                                     with thinking_area:
                                         process_placeholder = st.empty()
-                                        messages = []  # 创建一个列表来存储所有消息
-                                        
+                                        messages = []
                                         def update_process(message):
-                                            messages.append(message)  # 将新消息添加到列表中
-                                            # 使用换行符连接所有消息并显示
+                                            messages.append(message)
                                             process_placeholder.markdown("\n\n".join(messages))
-                                        
-                                        # 在处理过程中更新状态
                                         update_process("🔍 开始分析学生案例...")
                                         update_process("1️⃣ 提取关键信息...")
-                                        
-                                        # 第一步：始终先执行标签提取
                                         tag_result = process_student_case2(student_case, callback=update_process)
-                                        
-                                        # 初始化result为标签结果
                                         result = tag_result
-                                        
-                                        # 第二步：如果选择了生成个性服务指南，则继续执行服务指南生成
                                         if generate_service_guide and tag_result["status"] == "success":
                                             update_process("2️⃣ 生成个性服务指南...")
-                                            
-                                            # 确认Excel文件路径
                                             excel_path = os.path.join(os.path.dirname(__file__), '服务指南.xlsx')
-                                            
                                             if not os.path.exists(excel_path):
                                                 update_process("⚠️ 服务指南Excel文件不存在，只生成标签")
                                             else:
                                                 update_process("3️⃣ 根据标签生成个性服务指南...")
-                                                
-                                                # 构建完整的提示词
                                                 backstory = st.session_state.get('service_guide_backstory', prompt_templates.get_template('service_guide_backstory'))
                                                 task = st.session_state.get('service_guide_task', prompt_templates.get_template('service_guide_task'))
                                                 output = st.session_state.get('service_guide_output', prompt_templates.get_template('service_guide_output'))
-                                                
-                                                # 格式化任务说明中的学生信息
                                                 formatted_task = task.format(student_info=student_case)
-                                                
-                                                # 完整提示词
                                                 guide_prompt = f"{backstory}\n\n{formatted_task}\n\n{output}"
-                                                
-                                                # 使用服务指南Agent处理
                                                 try:
                                                     guide_result = process_student_case_with_guide(
                                                         student_case,
                                                         guide_prompt,
                                                         excel_path
                                                     )
-                                                    
                                                     if isinstance(guide_result, dict) and 'service_guide' in guide_result:
                                                         result['service_guide'] = guide_result['service_guide']
                                                     else:
@@ -652,7 +599,6 @@ def main():
                                                     update_process(f"⚠️ 生成服务指南时出错: {str(e)}")
                                                     result['service_guide'] = f"生成服务指南出错: {str(e)}"
                                         update_process("✅ 分析完成！")
-
                                 if result["status"] == "success":
                                     
                                     # 显示原始输出（放在可展开的部分中）
@@ -783,8 +729,6 @@ def main():
                             except Exception as e:
                                 st.error(f"处理过程中出错: {str(e)}")
                         
-                    elif not student_case :
-                        st.warning("请先输入学生案例信息")
         except Exception as e:
             logger.error(f"配置初始化失败: {str(e)}")
             st.error(f"配置初始化失败: {str(e)}")
