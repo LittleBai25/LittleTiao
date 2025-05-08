@@ -415,6 +415,13 @@ def safe_extract_recommended_tags(raw_output):
             output_dict = json.loads(json_part)
             if "recommended_tags" not in output_dict:
                 output_dict = {"recommended_tags": output_dict}
+            # 补全所有字段
+            for key in [
+                "countries", "majors", "schoolLevel", "SpecialProjects",
+                "Industryexperience", "Consultantbackground", "businessLocation"
+            ]:
+                if key not in output_dict["recommended_tags"]:
+                    output_dict["recommended_tags"][key] = []
             return output_dict
     except Exception as e:
         pass
