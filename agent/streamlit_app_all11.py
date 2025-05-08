@@ -413,16 +413,44 @@ def safe_extract_recommended_tags(raw_output):
             json_part = raw_output[start_idx:end_idx + 1]
             json_part = json_part.replace('```json', '').replace('```', '').strip()
             output_dict = json.loads(json_part)
-            if "recommended_tags" not in output_dict:
-                output_dict = {"recommended_tags": output_dict}
+            # 兼容 recommended_tag / recommended_tags
+            tags = None
+            if "recommended_tags" in output_dict:
+                tags = output_dict["recommended_tags"]
+            elif "recommended_tag" in output_dict:
+                tags = output_dict["recommended_tag"]
+            else:
+                tags = output_dict
+            # 字段名映射
+            field_map = {
+                "country": "countries",
+                "major": "majors",
+                "schoolLevel": "schoolLevel",
+                "SpecialProject": "SpecialProjects",
+                "Industryexperience": "Industryexperience",
+                "Consultantbackground": "Consultantbackground",
+                "businessLocation": "businessLocation",
+                # 兼容中文
+                "国家标签": "countries",
+                "专业标签": "majors",
+                "院校层次标签": "schoolLevel",
+                "特殊项目标签": "SpecialProjects",
+                "行业经验": "Industryexperience",
+                "顾问背景标签": "Consultantbackground",
+                "业务所在地标签": "businessLocation"
+            }
+            norm_tags = {}
+            for zh_or_en, en in field_map.items():
+                if zh_or_en in tags:
+                    norm_tags[en] = tags[zh_or_en]
             # 补全所有字段
             for key in [
                 "countries", "majors", "schoolLevel", "SpecialProjects",
                 "Industryexperience", "Consultantbackground", "businessLocation"
             ]:
-                if key not in output_dict["recommended_tags"]:
-                    output_dict["recommended_tags"][key] = []
-            return output_dict
+                if key not in norm_tags:
+                    norm_tags[key] = []
+            return {"recommended_tags": norm_tags}
     except Exception as e:
         pass
     # 返回空结构
