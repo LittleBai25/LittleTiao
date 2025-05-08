@@ -762,11 +762,11 @@ def main():
                                     with st.expander("查看原始输出", expanded=False):
                                         st.code(result["raw_output"])
                         
-                except Exception as e:
-                    st.error(f"处理过程中出错: {str(e)}")
+                        except Exception as e:
+                            st.error(f"处理过程中出错: {str(e)}")
                 
-                # 分析完成后：
-                st.session_state.analysis_done = True
+                        # 分析完成后：
+                        st.session_state.analysis_done = True
                 
         except Exception as e:
             logger.error(f"配置初始化失败: {str(e)}")
