@@ -413,7 +413,7 @@ def safe_extract_recommended_tags(raw_output):
             json_part = raw_output[start_idx:end_idx + 1]
             json_part = json_part.replace('```json', '').replace('```', '').strip()
             output_dict = json.loads(json_part)
-            # 只认AI的输出格式
+            # 兼容 recommended_tag / recommended_tags
             tags = None
             if "recommended_tag" in output_dict:
                 tags = output_dict["recommended_tag"]
@@ -421,15 +421,20 @@ def safe_extract_recommended_tags(raw_output):
                 tags = output_dict["recommended_tags"]
             else:
                 tags = output_dict
-            # 只认AI的字段名，强制映射为页面字段
+            # 兼容单复数字段名
+            def get_tag(keys, default=[]):
+                for k in keys:
+                    if k in tags:
+                        return tags[k]
+                return default
             norm_tags = {
-                "countries": tags.get("country", []),
-                "majors": tags.get("major", []),
-                "schoolLevel": tags.get("schoolLevel", []),
-                "SpecialProjects": tags.get("SpecialProject", []),
-                "Industryexperience": tags.get("Industryexperience", []),
-                "Consultantbackground": tags.get("Consultantbackground", []),
-                "businessLocation": tags.get("businessLocation", [])
+                "countries": get_tag(["countries", "country"]),
+                "majors": get_tag(["majors", "major"]),
+                "schoolLevel": get_tag(["schoolLevel"]),
+                "SpecialProjects": get_tag(["SpecialProjects", "SpecialProject"]),
+                "Industryexperience": get_tag(["Industryexperience"]),
+                "Consultantbackground": get_tag(["Consultantbackground"]),
+                "businessLocation": get_tag(["businessLocation"])
             }
             # 类型强制
             for key in norm_tags:
