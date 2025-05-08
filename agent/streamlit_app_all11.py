@@ -525,9 +525,8 @@ def main():
                 excel_path = os.path.join(os.path.dirname(__file__), '服务指南.xlsx')
                 if os.path.exists(excel_path):
                     logger.info(f"找到Excel文件: {excel_path}")
-                    if 'points_extractor' not in st.session_state:
-                        points_extractor = OperationPointsExtractor(excel_path)
-                        logger.info("操作要点提取器初始化成功")
+                    st.session_state.points_extractor = OperationPointsExtractor(excel_path)
+                    logger.info("操作要点提取器初始化成功")
                 else:
                     logger.warning(f"Excel文件不存在: {excel_path}")
                     st.session_state.points_extractor = None
@@ -609,14 +608,7 @@ def main():
 {other_info.strip()}
 """
                     with st.spinner("正在分析..."):
-                        st.markdown(
-                            '''
-                            <div style="text-align:center;">
-                                <img src="https://media.giphy.com/media/v6aOjy0Qo1fIA/giphy.gif" width="120"/>
-                            </div>
-                            ''',
-                            unsafe_allow_html=True
-                        )
+                        st.markdown("<div style='text-align:center; font-size:48px;'>🐱</div>", unsafe_allow_html=True)
                         try:
                             tag_result = process_student_case2(student_case)
                             result = tag_result
@@ -643,129 +635,78 @@ def main():
                                     except Exception as e:
                                         result['service_guide'] = f"生成服务指南出错: {str(e)}"
                             if result["status"] == "success":
-                                # 显示原始输出（放在可展开的部分中）
                                 with st.expander("查看原始输出（调试用）", expanded=False):
                                     st.subheader("模型输出结果")
                                     st.code(result["raw_output"], language="json")
-                                
-                                # 处理模型输出
+                                json_str = result["raw_output"]
+                                output_dict = safe_extract_recommended_tags(json_str)
+                                st.subheader("📊 分析结果")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.write("🎯 **匹配标签**")
+                                    if "recommended_tags" in output_dict:
+                                        tags = output_dict["recommended_tags"]
+                                        if tags.get("countries"):
+                                            st.write("**国家标签：**", ", ".join(tags["countries"]))
+                                        if tags.get("majors"):
+                                            st.write("**专业标签：**", ", ".join(tags["majors"]))
+                                        if tags.get("schoolLevel"):
+                                            st.write("**院校层次：**", ", ".join(tags["schoolLevel"]))
+                                        if tags.get("SpecialProjects"):
+                                            st.write("**特殊项目：**", ", ".join(tags["SpecialProjects"]))
+                                with col2:
+                                    if "recommended_tags" in output_dict:
+                                        tags = output_dict["recommended_tags"]
+                                        if tags.get("Industryexperience"):
+                                            st.write("**行业经验：**", ", ".join(tags["Industryexperience"]))
+                                        if tags.get("Consultantbackground"):
+                                            st.write("**顾问背景：**", ", ".join(tags["Consultantbackground"]))
+                                        if tags.get("businessLocation"):
+                                            st.write("**业务单位所在地：**", ", ".join(tags["businessLocation"]))
+                                if 'service_guide' in result:
+                                    st.subheader("📝 个性服务指南")
+                                    st.markdown(result['service_guide'])
+                                df = pd.DataFrame({
+                                    "文案顾问业务单位": [selected_unit],
+                                    "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
+                                    "专业标签": [', '.join(output_dict["recommended_tags"]["majors"])],
+                                    "名校专家": [', '.join(output_dict["recommended_tags"]["schoolLevel"])],
+                                    "特殊项目标签": [', '.join(output_dict["recommended_tags"]["SpecialProjects"])],
+                                    "行业经验": [', '.join(output_dict["recommended_tags"]["Industryexperience"])],
+                                    "文案背景": [', '.join(output_dict["recommended_tags"]["Consultantbackground"])],
+                                    "业务单位所在地": [', '.join(output_dict["recommended_tags"]["businessLocation"])],
+                                })
+                                st.session_state.tagged_data = df
                                 try:
-                                    # 清理和解析JSON部分
-                                    json_str = result["raw_output"]
-                                    
-                                    # 1. 提取JSON部分（第一个 { 到对应的 } 之间的内容）
-                                    output_dict = safe_extract_recommended_tags(json_str)
-                                    
-                                    # 显示标签匹配结果
-                                    st.subheader("📊 分析结果")
-                                    
-                                    # 创建两列布局
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        st.write("🎯 **匹配标签**")
-                                        if "recommended_tags" in output_dict:
-                                            tags = output_dict["recommended_tags"]
-                                            
-                                            # 显示国家标签
-                                            if tags.get("countries"):
-                                                st.write("**国家标签：**", ", ".join(tags["countries"]))
-                                                
-                                            # 显示专业标签
-                                            if tags.get("majors"):
-                                                st.write("**专业标签：**", ", ".join(tags["majors"]))
-                                                
-                                            # 显示其他重要标签
-                                            if tags.get("schoolLevel"):
-                                                st.write("**院校层次：**", ", ".join(tags["schoolLevel"]))
-                                                
-                                            if tags.get("SpecialProjects"):
-                                                st.write("**特殊项目：**", ", ".join(tags["SpecialProjects"]))
-                                    
-                                    with col2:
-                                        # 显示其他标签
-                                        if "recommended_tags" in output_dict:
-                                            tags = output_dict["recommended_tags"]
-                                            
-                                            if tags.get("Industryexperience"):
-                                                st.write("**行业经验：**", ", ".join(tags["Industryexperience"]))
-                                                
-                                            if tags.get("Consultantbackground"):
-                                                st.write("**顾问背景：**", ", ".join(tags["Consultantbackground"]))
-                                                
-                                            if tags.get("businessLocation"):
-                                                st.write("**业务单位所在地：**", ", ".join(tags["businessLocation"]))
-                                                
-                          
-
-                                    # 显示个性服务指南结果
-                                    if 'service_guide' in result:
-                                        st.subheader("📝 个性服务指南")
-                                        st.markdown(result['service_guide'])
-                                        
-                                    # 修改创建DataFrame的部分
-                                    df = pd.DataFrame({
-                                        "文案顾问业务单位": [selected_unit],  # 使用选择的业务单位
-                                        "国家标签": [', '.join(output_dict["recommended_tags"]["countries"])],
-                                        "专业标签": [', '.join(output_dict["recommended_tags"]["majors"])],
-                                        "名校专家": [', '.join(output_dict["recommended_tags"]["schoolLevel"])],
-                                        "特殊项目标签": [', '.join(output_dict["recommended_tags"]["SpecialProjects"])],
-                                        "行业经验": [', '.join(output_dict["recommended_tags"]["Industryexperience"])],
-                                        "文案背景": [', '.join(output_dict["recommended_tags"]["Consultantbackground"])],
-                                        "业务单位所在地": [', '.join(output_dict["recommended_tags"]["businessLocation"])],
-                                    })
-                                    
-                                    # 存入session_state
-                                    st.session_state.tagged_data = df
-                                    
-                                    update_process("🔄 使用算法提取操作要点...")
-
-                                    try:
-                                        ai_country_tag=df["国家标签"]
-                                        ai_major_tag=df["专业标签"]
-                                        logger.info(f"ai_country_tag: {ai_country_tag}")
-                                        logger.info(f"ai_major_tag: {ai_major_tag}")
-                                        points_extractor=OperationPointsExtractor(excel_path)
-                                        # 使用操作要点提取器，传入AI提取的标签
-                                        operation_points = points_extractor.get_operation_points(
+                                    ai_country_tag = df["国家标签"]
+                                    ai_major_tag = df["专业标签"]
+                                    logger.info(f"ai_country_tag: {ai_country_tag}")
+                                    logger.info(f"ai_major_tag: {ai_major_tag}")
+                                    if st.session_state.points_extractor is not None:
+                                        operation_points = st.session_state.points_extractor.get_operation_points(
                                             student_case,
                                             ai_country_tag,
                                             ai_major_tag
                                         )
-
                                         result['operation_points'] = operation_points
-                                        update_process("✅ 算法提取操作要点完成")
-                                    except Exception as e:
-                                        update_process(f"⚠️ 算法提取操作要点出错: {str(e)}")
-                                    if 'operation_points' in result:
-                                        st.subheader("📝 操作要点")
-                                        st.markdown(result['operation_points'])
-
-                                    # 将DataFrame显示放在可展开的部分中
-                                    with st.expander("查看标签数据表格", expanded=False):
-                                        st.dataframe(df)
-                                    
-                                    # 保存交互记录
-                                    save_interaction(
-                                        input_text=student_case,
-                                        output_result=result,
-                                        business_unit=selected_unit,
-                                        interaction_type="tag_matching"
-                                    )
-                                    
-                                    st.success("✅ 数据已处理并保存到内存中，可用于后续匹配")
-
                                 except Exception as e:
-                                    st.error(f"处理模型输出时出错: {str(e)}")
-                                    st.error("请检查模型输出格式是否符合预期")
-                                    # 显示原始输出以便调试
-                                    with st.expander("查看原始输出", expanded=False):
-                                        st.code(result["raw_output"])
-                        
+                                    result['operation_points'] = f"⚠️ 算法提取操作要点出错: {str(e)}"
+                                if 'operation_points' in result:
+                                    st.subheader("📝 操作要点")
+                                    st.markdown(result['operation_points'])
+                                with st.expander("查看标签数据表格", expanded=False):
+                                    st.dataframe(df)
+                                save_interaction(
+                                    input_text=student_case,
+                                    output_result=result,
+                                    business_unit=selected_unit,
+                                    interaction_type="tag_matching"
+                                )
+                                st.success("✅ 数据已处理并保存到内存中，可用于后续匹配")
+                            else:
+                                st.error("处理模型输出时出错: 未返回成功状态")
                         except Exception as e:
                             st.error(f"处理过程中出错: {str(e)}")
-                
-                        # 分析完成后：
                         st.session_state.analysis_done = True
                 
         except Exception as e:
