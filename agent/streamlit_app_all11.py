@@ -608,7 +608,6 @@ def main():
 {other_info.strip()}
 """
                     # 在分析按钮下方、st.spinner前显示小号猫 emoji，不居中
-                    st.markdown("<span style='font-size:28px;'>🐱</span>", unsafe_allow_html=True)
                     with st.spinner("正在分析..."):
                         try:
                             tag_result = process_student_case2(student_case)
