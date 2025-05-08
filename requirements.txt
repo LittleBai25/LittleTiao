@@ -24,3 +24,9 @@ mcp
 python-dotenv
 aiohttp
 PyMuPDF
+crewai== 0.36.0
+crewai-tools==0.4.7
+chromadb
+openpyxl
+xlsxwriter
+pysqlite3-binary
