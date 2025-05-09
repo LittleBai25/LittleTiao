@@ -403,83 +403,62 @@ with TAB1:
     rl_file = st.file_uploader("推荐信素材表（必传）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
+    # 添加写作需求快速选择按钮
+    st.subheader("快速选择写作需求")
+    
+    # 定义添加写作需求文本的函数
+    def add_requirement(requirement):
+        # 检查是否是互斥的推荐人选择
+        if requirement in ["请撰写第一位推荐人的推荐信", "请撰写第二位推荐人的推荐信"]:
+            # 移除其他推荐人选择相关的文本
+            current_text = st.session_state.writing_requirements
+            if "请撰写第一位推荐人的推荐信" in current_text:
+                current_text = current_text.replace("请撰写第一位推荐人的推荐信", "")
+            if "请撰写第二位推荐人的推荐信" in current_text:
+                current_text = current_text.replace("请撰写第二位推荐人的推荐信", "")
+            
+            # 清理多余的换行符
+            current_text = "\n".join([line for line in current_text.split("\n") if line.strip()])
+            
+            # 添加新的推荐人选择
+            if current_text:
+                st.session_state.writing_requirements = current_text + "\n" + requirement
+            else:
+                st.session_state.writing_requirements = requirement
+        else:
+            # 普通需求，检查是否已经存在
+            if requirement not in st.session_state.writing_requirements:
+                if st.session_state.writing_requirements:
+                    st.session_state.writing_requirements += "\n" + requirement
+                else:
+                    st.session_state.writing_requirements = requirement
+    
+    # 创建两列用于互斥的推荐人选择按钮
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("撰写第一位推荐人的推荐信", use_container_width=True):
+            add_requirement("请撰写第一位推荐人的推荐信")
+    
+    with col2:
+        if st.button("撰写第二位推荐人的推荐信", use_container_width=True):
+            add_requirement("请撰写第二位推荐人的推荐信")
+    
+    # 创建其他快速选择按钮
+    col3, col4 = st.columns(2)
+    with col3:
+        if st.button("补充更多课堂互动细节", use_container_width=True):
+            add_requirement("请补充更多课堂互动细节")
+    
+    with col4:
+        if st.button("补充更多科研项目细节", use_container_width=True):
+            add_requirement("请补充更多科研项目细节")
+    
     # 添加用户写作需求输入框
     writing_requirements = st.text_area("写作需求（可选）", 
                                       value=st.session_state.writing_requirements, 
                                       placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
                                       height=120)
     st.session_state.writing_requirements = writing_requirements
-    
-    # 添加写作需求选择项
-    st.subheader("快速选择写作需求")
-    
-    # 创建两列布局用于放置互斥的选项
-    rec_person_col1, rec_person_col2 = st.columns(2)
-    
-    # 初始化session state用于记录选项状态
-    if "first_recommender" not in st.session_state:
-        st.session_state.first_recommender = False
-    if "second_recommender" not in st.session_state:
-        st.session_state.second_recommender = False
-    
-    # 定义互斥选择的回调函数
-    def on_first_recommender_change():
-        if st.session_state.first_recommender_checkbox:
-            st.session_state.second_recommender = False
-    
-    def on_second_recommender_change():
-        if st.session_state.second_recommender_checkbox:
-            st.session_state.first_recommender = False
-    
-    # 添加互斥的推荐人选择项
-    with rec_person_col1:
-        first_recommender = st.checkbox("撰写第一位推荐人的推荐信", 
-                                     value=st.session_state.first_recommender,
-                                     key="first_recommender_checkbox",
-                                     on_change=on_first_recommender_change)
-        st.session_state.first_recommender = first_recommender
-    
-    with rec_person_col2:
-        second_recommender = st.checkbox("撰写第二位推荐人的推荐信", 
-                                      value=st.session_state.second_recommender,
-                                      key="second_recommender_checkbox",
-                                      on_change=on_second_recommender_change)
-        st.session_state.second_recommender = second_recommender
-    
-    # 添加其他可多选的选项
-    if "class_interactions" not in st.session_state:
-        st.session_state.class_interactions = False
-    if "research_details" not in st.session_state:
-        st.session_state.research_details = False
-    
-    class_interactions = st.checkbox("补充更多课堂互动细节", value=st.session_state.class_interactions)
-    st.session_state.class_interactions = class_interactions
-    
-    research_details = st.checkbox("补充更多科研项目细节", value=st.session_state.research_details)
-    st.session_state.research_details = research_details
-    
-    # 组合所有选择项到最终的写作需求中
-    final_requirements = st.session_state.writing_requirements
-    
-    if st.session_state.first_recommender:
-        if final_requirements:
-            final_requirements += "\n"
-        final_requirements += "请撰写第一位推荐人的推荐信"
-    
-    if st.session_state.second_recommender:
-        if final_requirements:
-            final_requirements += "\n"
-        final_requirements += "请撰写第二位推荐人的推荐信"
-    
-    if st.session_state.class_interactions:
-        if final_requirements:
-            final_requirements += "\n"
-        final_requirements += "请补充更多课堂互动细节"
-    
-    if st.session_state.research_details:
-        if final_requirements:
-            final_requirements += "\n"
-        final_requirements += "请补充更多科研项目细节"
     
     # 添加"开始生成"按钮
     if st.button("开始生成", use_container_width=True):
@@ -515,7 +494,7 @@ with TAB1:
                 st.session_state.support_analyst_persona,
                 st.session_state.support_analyst_task,
                 st.session_state.support_analyst_output_format,
-                final_requirements
+                st.session_state.writing_requirements
             )
 
 with TAB2:
