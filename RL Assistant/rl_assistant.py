@@ -399,23 +399,23 @@ def run_agent(agent_name, model, prompt, parent_run_id=None):
 TAB1, TAB2, TAB3 = st.tabs(["文件上传与分析", "提示词与模型设置", "系统状态"])
 
 with TAB1:
-    st.header("上传你的RL素材和支持文件")
-    rl_file = st.file_uploader("个人RL素材表（单选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
+    st.header("上传你的推荐信素材和支持文件")
+    rl_file = st.file_uploader("推荐信素材表（必传）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
     # 添加用户写作需求输入框
     writing_requirements = st.text_area("写作需求（可选）", 
                                       value=st.session_state.writing_requirements, 
-                                      placeholder="请输入你的具体写作需求，例如：目标岗位、侧重点、特殊要求等",
+                                      placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
                                       height=120)
     st.session_state.writing_requirements = writing_requirements
     
-    # 添加"开始分析"按钮
-    if st.button("开始分析", use_container_width=True):
+    # 添加"开始生成"按钮
+    if st.button("开始生成", use_container_width=True):
         if not api_key:
             st.error("请在 Streamlit secrets 中配置 OPENROUTER_API_KEY")
         elif not rl_file:
-            st.error("请上传RL素材表")
+            st.error("请上传推荐信素材表")
         else:
             # 从session_state获取模型
             support_analyst_model = st.session_state.get("selected_support_analyst_model", get_model_list()[0])
