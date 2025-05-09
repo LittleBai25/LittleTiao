@@ -451,25 +451,25 @@ with TAB1:
     # 用div包裹按钮以应用自定义CSS类
     with col1:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("第一位推荐人", use_container_width=True):
+        if st.button("第一位推荐人", key="btn_first_recommender", use_container_width=True):
             add_requirement("请撰写第一位推荐人的推荐信")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("第二位推荐人", use_container_width=True):
+        if st.button("第二位推荐人", key="btn_second_recommender", use_container_width=True):
             add_requirement("请撰写第二位推荐人的推荐信")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("课堂互动细节", use_container_width=True):
+        if st.button("课堂互动细节", key="btn_class_interaction", use_container_width=True):
             add_requirement("请补充更多课堂互动细节")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("科研项目细节", use_container_width=True):
+        if st.button("科研项目细节", key="btn_research_details", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
         st.markdown('</div>', unsafe_allow_html=True)
     
