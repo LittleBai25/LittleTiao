@@ -433,24 +433,23 @@ with TAB1:
                 else:
                     st.session_state.writing_requirements = requirement
     
-    # 创建两列用于互斥的推荐人选择按钮
-    col1, col2 = st.columns(2)
+    # 创建单行四列布局
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        if st.button("撰写第一位推荐人的推荐信", use_container_width=True):
+        if st.button("第一位推荐人", use_container_width=True):
             add_requirement("请撰写第一位推荐人的推荐信")
     
     with col2:
-        if st.button("撰写第二位推荐人的推荐信", use_container_width=True):
+        if st.button("第二位推荐人", use_container_width=True):
             add_requirement("请撰写第二位推荐人的推荐信")
     
-    # 创建其他快速选择按钮
-    col3, col4 = st.columns(2)
     with col3:
-        if st.button("补充更多课堂互动细节", use_container_width=True):
+        if st.button("补充课堂互动", use_container_width=True):
             add_requirement("请补充更多课堂互动细节")
     
     with col4:
-        if st.button("补充更多科研项目细节", use_container_width=True):
+        if st.button("补充科研项目", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
     
     # 添加用户写作需求输入框
