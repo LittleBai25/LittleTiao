@@ -430,17 +430,10 @@ with TAB1:
                 else:
                     st.session_state.writing_requirements = requirement
     
-    # 添加用户写作需求输入框
-    writing_requirements = st.text_area("写作需求（可选）", 
-                                      value=st.session_state.writing_requirements, 
-                                      placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
-                                      height=120)
-    st.session_state.writing_requirements = writing_requirements
+    # 显示写作需求标签
+    st.write("写作需求（可选）")
     
-    # 快速选择按钮放在写作需求下方
-    st.text("快速选择：")
-    
-    # 创建单行四列布局
+    # 创建单行四列布局放在标签和输入框之间
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -458,6 +451,13 @@ with TAB1:
     with col4:
         if st.button("科研项目细节", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
+    
+    # 添加用户写作需求输入框
+    writing_requirements = st.text_area("", 
+                                      value=st.session_state.writing_requirements, 
+                                      placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
+                                      height=120)
+    st.session_state.writing_requirements = writing_requirements
     
     # 添加"开始生成"按钮
     if st.button("开始生成", use_container_width=True):
