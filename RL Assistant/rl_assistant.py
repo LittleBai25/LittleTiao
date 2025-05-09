@@ -155,6 +155,8 @@ if "resume_content" not in st.session_state:
     st.session_state.rl_content = ""
 if "support_files_content" not in st.session_state:
     st.session_state.support_files_content = []
+if "writing_requirements" not in st.session_state:
+    st.session_state.writing_requirements = ""
     
 # 新增：支持文件分析agent的提示词
 if "support_analyst_persona" not in st.session_state:
@@ -278,7 +280,8 @@ def read_file(file):
 # 处理模型调用
 def process_with_model(support_analyst_model, rl_assistant_model, rl_content, support_files_content, 
                       persona, task, output_format, 
-                      support_analyst_persona, support_analyst_task, support_analyst_output_format):
+                      support_analyst_persona, support_analyst_task, support_analyst_output_format,
+                      writing_requirements=""):
     # 主运行ID
     main_run_id = str(uuid.uuid4())
     # 检查是否有支持文件
@@ -326,9 +329,15 @@ def process_with_model(support_analyst_model, rl_assistant_model, rl_content, su
             file_contents += "支持文件内容:\n"
             for i, content in enumerate(support_files_content):
                 file_contents += f"--- 文件 {i+1} ---\n{content}\n\n"
+        
+        # 如果有用户写作需求，添加到提示中
+        user_requirements = ""
+        if writing_requirements:
+            user_requirements = f"\n用户写作需求:\n{writing_requirements}\n"
+            
         # 构建最终的RL助理提示词
         rl_prompt = f"""人物设定：{persona}
-\n任务描述：{task}
+\n任务描述：{task}{user_requirements}
 \n输出格式：{output_format}
 \n文件内容：
 {file_contents}
@@ -412,6 +421,13 @@ with TAB1:
     rl_file = st.file_uploader("个人RL素材表（单选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
+    # 添加用户写作需求输入框
+    writing_requirements = st.text_area("写作需求（可选）", 
+                                      value=st.session_state.writing_requirements, 
+                                      placeholder="请输入你的具体写作需求，例如：目标岗位、侧重点、特殊要求等",
+                                      height=120)
+    st.session_state.writing_requirements = writing_requirements
+    
     # 添加"开始分析"按钮
     if st.button("开始分析", use_container_width=True):
         if not api_key:
@@ -445,7 +461,8 @@ with TAB1:
                 st.session_state.output_format,
                 st.session_state.support_analyst_persona,
                 st.session_state.support_analyst_task,
-                st.session_state.support_analyst_output_format
+                st.session_state.support_analyst_output_format,
+                st.session_state.writing_requirements
             )
 
 with TAB2:
