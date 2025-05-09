@@ -403,7 +403,6 @@ with TAB1:
     rl_file = st.file_uploader("推荐信素材表（必传）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
-    
     # 定义添加写作需求文本的函数
     def add_requirement(requirement):
         # 检查是否是互斥的推荐人选择
@@ -431,6 +430,16 @@ with TAB1:
                 else:
                     st.session_state.writing_requirements = requirement
     
+    # 添加用户写作需求输入框
+    writing_requirements = st.text_area("写作需求（可选）", 
+                                      value=st.session_state.writing_requirements, 
+                                      placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
+                                      height=120)
+    st.session_state.writing_requirements = writing_requirements
+    
+    # 快速选择按钮放在写作需求下方
+    st.text("快速选择：")
+    
     # 创建单行四列布局
     col1, col2, col3, col4 = st.columns(4)
     
@@ -449,13 +458,6 @@ with TAB1:
     with col4:
         if st.button("科研项目细节", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
-    
-    # 添加用户写作需求输入框
-    writing_requirements = st.text_area("写作需求（可选）", 
-                                      value=st.session_state.writing_requirements, 
-                                      placeholder="请输入你的具体写作需求，例如：具体撰写哪一位推荐人的推荐信",
-                                      height=120)
-    st.session_state.writing_requirements = writing_requirements
     
     # 添加"开始生成"按钮
     if st.button("开始生成", use_container_width=True):
