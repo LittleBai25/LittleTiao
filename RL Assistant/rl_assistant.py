@@ -403,8 +403,6 @@ with TAB1:
     rl_file = st.file_uploader("推荐信素材表（必传）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
-    # 添加写作需求快速选择按钮
-    st.subheader("快速选择写作需求")
     
     # 定义添加写作需求文本的函数
     def add_requirement(requirement):
@@ -445,11 +443,11 @@ with TAB1:
             add_requirement("请撰写第二位推荐人的推荐信")
     
     with col3:
-        if st.button("补充课堂互动", use_container_width=True):
+        if st.button("课堂互动细节", use_container_width=True):
             add_requirement("请补充更多课堂互动细节")
     
     with col4:
-        if st.button("补充科研项目", use_container_width=True):
+        if st.button("科研项目细节", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
     
     # 添加用户写作需求输入框
