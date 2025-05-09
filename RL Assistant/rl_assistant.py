@@ -430,27 +430,48 @@ with TAB1:
                 else:
                     st.session_state.writing_requirements = requirement
     
-    # 显示写作需求标签
-    st.write("写作需求（可选）")
+    # 添加自定义CSS使按钮更小
+    st.markdown("""
+    <style>
+    .smaller-button button {
+        font-size: 0.8em !important;
+        padding: 0.2rem 0.5rem;
+        min-height: 0;
+        height: auto;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # 显示写作需求标签，与文件上传器标签风格一致
+    st.markdown('<p style="font-size: 14px; font-weight: 500; color: rgb(49, 51, 63);">写作需求（可选）</p>', unsafe_allow_html=True)
     
     # 创建单行四列布局放在标签和输入框之间
     col1, col2, col3, col4 = st.columns(4)
     
+    # 用div包裹按钮以应用自定义CSS类
     with col1:
+        st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("第一位推荐人", use_container_width=True):
             add_requirement("请撰写第一位推荐人的推荐信")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
+        st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("第二位推荐人", use_container_width=True):
             add_requirement("请撰写第二位推荐人的推荐信")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
+        st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("课堂互动细节", use_container_width=True):
             add_requirement("请补充更多课堂互动细节")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
+        st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("科研项目细节", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # 添加用户写作需求输入框
     writing_requirements = st.text_area("", 
