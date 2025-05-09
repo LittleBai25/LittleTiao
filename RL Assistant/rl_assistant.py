@@ -66,7 +66,7 @@ b.将混乱的素材按推荐信四段结构所需内容重新分类组织
 c.对于不完整或表述不清的信息，进行合理推断并标记为补充内容 
 d.提取每段所需的核心信息，确保信件逻辑连贯、重点突出
 4.素材表中可能包含多位推荐人信息，如用户未明确指定，默认使用第一位推荐人的信息和素材进行写作。请确保不要混淆不同推荐人的素材内容。
-5.用户如输入“请撰写第二位推荐人”的指令一般是指学术推荐人2
+5.用户如输入"请撰写第二位推荐人"的指令一般是指学术推荐人2
 6.推荐信必须以推荐人为第一人称进行写作
 7.推荐信分为两种类型： 
 a.学术推荐信：适用于推荐人是老师或学术导师的情况
@@ -410,6 +410,77 @@ with TAB1:
                                       height=120)
     st.session_state.writing_requirements = writing_requirements
     
+    # 添加写作需求选择项
+    st.subheader("快速选择写作需求")
+    
+    # 创建两列布局用于放置互斥的选项
+    rec_person_col1, rec_person_col2 = st.columns(2)
+    
+    # 初始化session state用于记录选项状态
+    if "first_recommender" not in st.session_state:
+        st.session_state.first_recommender = False
+    if "second_recommender" not in st.session_state:
+        st.session_state.second_recommender = False
+    
+    # 定义互斥选择的回调函数
+    def on_first_recommender_change():
+        if st.session_state.first_recommender_checkbox:
+            st.session_state.second_recommender = False
+    
+    def on_second_recommender_change():
+        if st.session_state.second_recommender_checkbox:
+            st.session_state.first_recommender = False
+    
+    # 添加互斥的推荐人选择项
+    with rec_person_col1:
+        first_recommender = st.checkbox("撰写第一位推荐人的推荐信", 
+                                     value=st.session_state.first_recommender,
+                                     key="first_recommender_checkbox",
+                                     on_change=on_first_recommender_change)
+        st.session_state.first_recommender = first_recommender
+    
+    with rec_person_col2:
+        second_recommender = st.checkbox("撰写第二位推荐人的推荐信", 
+                                      value=st.session_state.second_recommender,
+                                      key="second_recommender_checkbox",
+                                      on_change=on_second_recommender_change)
+        st.session_state.second_recommender = second_recommender
+    
+    # 添加其他可多选的选项
+    if "class_interactions" not in st.session_state:
+        st.session_state.class_interactions = False
+    if "research_details" not in st.session_state:
+        st.session_state.research_details = False
+    
+    class_interactions = st.checkbox("补充更多课堂互动细节", value=st.session_state.class_interactions)
+    st.session_state.class_interactions = class_interactions
+    
+    research_details = st.checkbox("补充更多科研项目细节", value=st.session_state.research_details)
+    st.session_state.research_details = research_details
+    
+    # 组合所有选择项到最终的写作需求中
+    final_requirements = st.session_state.writing_requirements
+    
+    if st.session_state.first_recommender:
+        if final_requirements:
+            final_requirements += "\n"
+        final_requirements += "请撰写第一位推荐人的推荐信"
+    
+    if st.session_state.second_recommender:
+        if final_requirements:
+            final_requirements += "\n"
+        final_requirements += "请撰写第二位推荐人的推荐信"
+    
+    if st.session_state.class_interactions:
+        if final_requirements:
+            final_requirements += "\n"
+        final_requirements += "请补充更多课堂互动细节"
+    
+    if st.session_state.research_details:
+        if final_requirements:
+            final_requirements += "\n"
+        final_requirements += "请补充更多科研项目细节"
+    
     # 添加"开始生成"按钮
     if st.button("开始生成", use_container_width=True):
         if not api_key:
@@ -444,7 +515,7 @@ with TAB1:
                 st.session_state.support_analyst_persona,
                 st.session_state.support_analyst_task,
                 st.session_state.support_analyst_output_format,
-                st.session_state.writing_requirements
+                final_requirements
             )
 
 with TAB2:
