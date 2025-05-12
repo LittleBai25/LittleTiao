@@ -31,7 +31,6 @@ openpyxl
 xlsxwriter
 pysqlite3-binary
 setuptools
-langchain-smithery
 docx
 queue
 threadpoolctl
