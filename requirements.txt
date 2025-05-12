@@ -32,7 +32,4 @@ xlsxwriter
 pysqlite3-binary
 setuptools
 langchain-smithery
-pypdf2
-pymupdf
 docx
-python-docx
