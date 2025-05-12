@@ -36,3 +36,4 @@ docx
 queue
 threadpoolctl
 typing-extensions
+setuptools
