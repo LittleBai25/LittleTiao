@@ -45,9 +45,9 @@ if langsmith_api_key:
             try:
                 langsmith_client.create_project(langsmith_project)
             except Exception as e:
-                # 只要是已存在的冲突就忽略
-                if "409" in str(e) or "already exists" in str(e):
-                    pass
+                # 如果是409冲突（项目已存在），忽略这个错误
+                if "409" in str(e) or "Conflict" in str(e) or "already exists" in str(e):
+                    pass  # 项目已存在，不需要处理
                 else:
                     st.warning(f"LangSmith项目创建失败: {str(e)}")
     except Exception as e:
@@ -66,7 +66,7 @@ b.将混乱的素材按推荐信四段结构所需内容重新分类组织
 c.对于不完整或表述不清的信息，进行合理推断并标记为补充内容 
 d.提取每段所需的核心信息，确保信件逻辑连贯、重点突出
 4.素材表中可能包含多位推荐人信息，如用户未明确指定，默认使用第一位推荐人的信息和素材进行写作。请确保不要混淆不同推荐人的素材内容。
-5.用户如输入“请撰写第二位推荐人”的指令一般是指学术推荐人2
+5.用户如输入"请撰写第二位推荐人"的指令一般是指学术推荐人2
 6.推荐信必须以推荐人为第一人称进行写作
 7.推荐信分为两种类型： 
 a.学术推荐信：适用于推荐人是老师或学术导师的情况
@@ -140,6 +140,12 @@ if "support_files_content" not in st.session_state:
 if "writing_requirements" not in st.session_state:
     st.session_state.writing_requirements = ""
     
+# 设置模型选择的默认值，因为已经隐藏了模型选择界面
+if "selected_support_analyst_model" not in st.session_state:
+    st.session_state.selected_support_analyst_model = "qwen/qwen-max"  # 默认模型
+if "selected_rl_assistant_model" not in st.session_state:
+    st.session_state.selected_rl_assistant_model = "qwen/qwen-max"  # 默认模型
+
 # 新增：支持文件分析agent的提示词
 if "support_analyst_persona" not in st.session_state:
     st.session_state.support_analyst_persona = """您是一位专业的文档分析专家，擅长从各类文件中提取和整合信息。您的任务是分析用户上传的辅助文档（如项目海报、报告或作品集），并生成标准化报告，用于简历顾问后续处理。您具备敏锐的信息捕捉能力和系统化的分析方法，能够从复杂文档中提取关键经历信息。"""
@@ -235,13 +241,13 @@ def load_prompts():
         if os.path.exists("prompts/saved_prompts.json"):
             with open("prompts/saved_prompts.json", "r", encoding="utf-8") as f:
                 prompts = json.load(f)
-                st.session_state.persona = prompts.get("persona", "")
-                st.session_state.task = prompts.get("task", "")
-                st.session_state.output_format = prompts.get("output_format", "")
+                st.session_state.persona = prompts.get("persona", st.session_state.persona)
+                st.session_state.task = prompts.get("task", st.session_state.task)
+                st.session_state.output_format = prompts.get("output_format", st.session_state.output_format)
                 # 新增：支持文件分析agent的提示词
-                st.session_state.support_analyst_persona = prompts.get("support_analyst_persona", "")
-                st.session_state.support_analyst_task = prompts.get("support_analyst_task", "")
-                st.session_state.support_analyst_output_format = prompts.get("support_analyst_output_format", "")
+                st.session_state.support_analyst_persona = prompts.get("support_analyst_persona", st.session_state.support_analyst_persona)
+                st.session_state.support_analyst_task = prompts.get("support_analyst_task", st.session_state.support_analyst_task)
+                st.session_state.support_analyst_output_format = prompts.get("support_analyst_output_format", st.session_state.support_analyst_output_format)
             return True
         return False
     except Exception as e:
@@ -395,8 +401,8 @@ def run_agent(agent_name, model, prompt, parent_run_id=None):
             st.warning(f"LangSmith更新运行结果失败: {str(e)}")
     return result.content
 
-# Tab布局 - 修改为三个标签页
-TAB1, TAB2, TAB3 = st.tabs(["文件上传与分析", "提示词与模型设置", "系统状态"])
+# Tab布局 - 修改为只显示两个标签页，隐藏设置页
+TAB1, TAB3 = st.tabs(["文件上传与分析", "系统状态"])
 
 with TAB1:
     st.header("上传你的推荐信素材和支持文件")
@@ -406,18 +412,37 @@ with TAB1:
     # 定义添加写作需求文本的函数
     def add_requirement(requirement):
         # 检查是否是互斥的推荐人选择
-        if requirement in ["请撰写第一位推荐人的推荐信", "请撰写第二位推荐人的推荐信"]:
+        if "请撰写第" in requirement and "位推荐人的推荐信" in requirement:
             # 移除其他推荐人选择相关的文本
             current_text = st.session_state.writing_requirements
-            if "请撰写第一位推荐人的推荐信" in current_text:
-                current_text = current_text.replace("请撰写第一位推荐人的推荐信", "")
-            if "请撰写第二位推荐人的推荐信" in current_text:
-                current_text = current_text.replace("请撰写第二位推荐人的推荐信", "")
+            lines = current_text.split("\n")
+            filtered_lines = []
+            for line in lines:
+                if not (("请撰写第" in line) and ("位推荐人的推荐信" in line)):
+                    filtered_lines.append(line)
             
             # 清理多余的换行符
-            current_text = "\n".join([line for line in current_text.split("\n") if line.strip()])
+            current_text = "\n".join([line for line in filtered_lines if line.strip()])
             
             # 添加新的推荐人选择
+            if current_text:
+                st.session_state.writing_requirements = current_text + "\n" + requirement
+            else:
+                st.session_state.writing_requirements = requirement
+        # 检查性别选择
+        elif "被推荐人是男生" in requirement or "被推荐人是女生" in requirement:
+            # 移除其他性别选择
+            current_text = st.session_state.writing_requirements
+            lines = current_text.split("\n")
+            filtered_lines = []
+            for line in lines:
+                if not (("被推荐人是男生" in line) or ("被推荐人是女生" in line)):
+                    filtered_lines.append(line)
+            
+            # 清理多余的换行符
+            current_text = "\n".join([line for line in filtered_lines if line.strip()])
+            
+            # 添加新的性别选择
             if current_text:
                 st.session_state.writing_requirements = current_text + "\n" + requirement
             else:
@@ -445,29 +470,35 @@ with TAB1:
     # 显示写作需求标签，与文件上传器标签风格一致
     st.markdown('<p style="font-size: 14px; font-weight: 500; color: rgb(49, 51, 63);">写作需求（可选）</p>', unsafe_allow_html=True)
     
-    # 创建单行四列布局放在标签和输入框之间
-    col1, col2, col3, col4 = st.columns(4)
+    # 创建六列布局放在标签和输入框之间
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     # 用div包裹按钮以应用自定义CSS类
     with col1:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("第一位推荐人", key="btn_first_recommender", use_container_width=True):
-            add_requirement("请撰写第一位推荐人的推荐信")
+        if st.button("第X位推荐人", key="btn_x_recommender", use_container_width=True):
+            add_requirement("请撰写第X位推荐人的推荐信")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
-        if st.button("第二位推荐人", key="btn_second_recommender", use_container_width=True):
-            add_requirement("请撰写第二位推荐人的推荐信")
+        if st.button("男生", key="btn_male", use_container_width=True):
+            add_requirement("被推荐人是男生")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
+        st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
+        if st.button("女生", key="btn_female", use_container_width=True):
+            add_requirement("被推荐人是女生")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col4:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("课堂互动细节", key="btn_class_interaction", use_container_width=True):
             add_requirement("请补充更多课堂互动细节")
         st.markdown('</div>', unsafe_allow_html=True)
     
-    with col4:
+    with col5:
         st.markdown('<div class="smaller-button">', unsafe_allow_html=True)
         if st.button("科研项目细节", key="btn_research_details", use_container_width=True):
             add_requirement("请补充更多科研项目细节")
@@ -517,101 +548,10 @@ with TAB1:
                 st.session_state.writing_requirements
             )
 
-with TAB2:
-    st.header("提示词与模型设置")
-    
-    # 尝试加载保存的提示词
-    load_prompts()
-    
-    # 使用两列布局分别设置两个agent
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("支持文件分析 Agent (supporting_doc_analyst)")
-        
-        # 模型选择
-        model_list = get_model_list()
-        selected_support_analyst_model = st.selectbox(
-            "选择支持文件分析模型", 
-            model_list,
-            key="support_analyst_model_selector"
-        )
-        # 将选择的模型保存到session_state
-        st.session_state.selected_support_analyst_model = selected_support_analyst_model
-        
-        # 提示词输入区
-        support_analyst_persona = st.text_area(
-            "人物设定", 
-            value=st.session_state.support_analyst_persona, 
-            placeholder="如：我是一位专业的简历分析师，擅长从各种材料中提取关键经历要点……", 
-            height=120
-        )
-        support_analyst_task = st.text_area(
-            "任务描述", 
-            value=st.session_state.support_analyst_task, 
-            placeholder="如：请分析这些支持文件，提取关键的经历、技能和成就要点……", 
-            height=120
-        )
-        support_analyst_output_format = st.text_area(
-            "输出格式", 
-            value=st.session_state.support_analyst_output_format, 
-            placeholder="如：请用要点列表的形式整理出关键经历，每个要点包含时间、地点、职位、成就……", 
-            height=120
-        )
-        
-        # 更新session state
-        st.session_state.support_analyst_persona = support_analyst_persona
-        st.session_state.support_analyst_task = support_analyst_task
-        st.session_state.support_analyst_output_format = support_analyst_output_format
-    
-    with col2:
-        st.subheader("RL助理 Agent (rl_assistant)")
-        # 模型选择
-        selected_rl_assistant_model = st.selectbox(
-            "选择RL生成模型", 
-            model_list,
-            key="rl_assistant_model_selector"
-        )
-        # 将选择的模型保存到session_state
-        st.session_state.selected_rl_assistant_model = selected_rl_assistant_model
-        # 提示词输入区
-        persona = st.text_area(
-            "人物设定", 
-            value=st.session_state.persona, 
-            placeholder="如：我是应届毕业生，主修计算机科学……", 
-            height=120
-        )
-        task = st.text_area(
-            "任务描述", 
-            value=st.session_state.task, 
-            placeholder="如：请根据我的RL素材和支持文件分析结果，生成一份针对XX岗位的RL报告……", 
-            height=120
-        )
-        output_format = st.text_area(
-            "输出格式", 
-            value=st.session_state.output_format, 
-            placeholder="如：请用markdown格式输出，包含以下部分……", 
-            height=120
-        )
-        # 更新session state
-        st.session_state.persona = persona
-        st.session_state.task = task
-        st.session_state.output_format = output_format
-    
-    # 保存按钮 (跨两列)
-    if st.button("保存所有提示词", use_container_width=True):
-        # 保存到文件
-        if save_prompts():
-            st.success("所有提示词已保存到文件，下次启动应用时会自动加载")
-        # 添加处理流程说明
-        st.info("""
-        **处理流程说明**:
-        1. 如果上传了支持文件，系统将先使用支持文件分析agent分析这些文件，提取经历要点
-        2. 然后系统将使用RL助理agent，综合分析RL素材表和上一步的分析结果，生成最终RL报告
-        3. 如果没有上传支持文件，系统将直接使用RL助理agent处理RL素材表
-        """)
+# 确保在应用启动时加载默认提示词
+load_prompts()
 
-# 添加系统状态到第三个标签页
+# 隐藏设置TAB，但保留TAB3系统状态
 with TAB3:
     st.title("系统状态")
     
