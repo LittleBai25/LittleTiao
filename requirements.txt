@@ -8,7 +8,6 @@ Pillow==10.1.0
 markitdown[all]
 langgraph
 langchain
-langchain-openai
 langsmith
 langchain-core
 langchain-community
@@ -19,7 +18,6 @@ beautifulsoup4
 openai
 mcp-client
 websockets
-python-dotenv
 mcp
 python-dotenv
 aiohttp
