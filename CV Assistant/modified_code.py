@@ -426,8 +426,8 @@ def run_agent(agent_name, model, prompt, parent_run_id=None):
     
     return result.content
 
-# Tab布局 - 修改为三个标签页
-TAB1, TAB2, TAB3 = st.tabs(["文件上传与分析", "提示词与模型设置", "系统状态"])
+# Tab布局 - 修改为两个标签页
+TAB1, TAB3 = st.tabs(["文件上传与分析", "系统状态"])
 
 with TAB1:
     st.header("上传你的简历素材和支持文件")
@@ -469,104 +469,6 @@ with TAB1:
                 st.session_state.support_analyst_task,
                 st.session_state.support_analyst_output_format
             )
-
-with TAB2:
-    st.header("提示词与模型设置")
-    
-    # 尝试加载保存的提示词
-    load_prompts()
-    
-    # 使用两列布局分别设置两个agent
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("支持文件分析 Agent (supporting_doc_analyst)")
-        
-        # 模型选择
-        model_list = get_model_list()
-        selected_support_analyst_model = st.selectbox(
-            "选择支持文件分析模型", 
-            model_list,
-            key="support_analyst_model_selector"
-        )
-        # 将选择的模型保存到session_state
-        st.session_state.selected_support_analyst_model = selected_support_analyst_model
-        
-        # 提示词输入区
-        support_analyst_persona = st.text_area(
-            "人物设定", 
-            value=st.session_state.support_analyst_persona, 
-            placeholder="如：我是一位专业的简历分析师，擅长从各种材料中提取关键经历要点……", 
-            height=120
-        )
-        support_analyst_task = st.text_area(
-            "任务描述", 
-            value=st.session_state.support_analyst_task, 
-            placeholder="如：请分析这些支持文件，提取关键的经历、技能和成就要点……", 
-            height=120
-        )
-        support_analyst_output_format = st.text_area(
-            "输出格式", 
-            value=st.session_state.support_analyst_output_format, 
-            placeholder="如：请用要点列表的形式整理出关键经历，每个要点包含时间、地点、职位、成就……", 
-            height=120
-        )
-        
-        # 更新session state
-        st.session_state.support_analyst_persona = support_analyst_persona
-        st.session_state.support_analyst_task = support_analyst_task
-        st.session_state.support_analyst_output_format = support_analyst_output_format
-    
-    with col2:
-        st.subheader("简历助手 Agent (cv_assistant)")
-        
-        # 模型选择
-        selected_cv_assistant_model = st.selectbox(
-            "选择简历生成模型", 
-            model_list,
-            key="cv_assistant_model_selector"
-        )
-        # 将选择的模型保存到session_state
-        st.session_state.selected_cv_assistant_model = selected_cv_assistant_model
-        
-        # 提示词输入区
-        persona = st.text_area(
-            "人物设定", 
-            value=st.session_state.persona, 
-            placeholder="如：我是应届毕业生，主修计算机科学……", 
-            height=120
-        )
-        task = st.text_area(
-            "任务描述", 
-            value=st.session_state.task, 
-            placeholder="如：请根据我的简历素材和支持文件分析结果，生成一份针对XX岗位的简历……", 
-            height=120
-        )
-        output_format = st.text_area(
-            "输出格式", 
-            value=st.session_state.output_format, 
-            placeholder="如：请用markdown格式输出，包含以下部分……", 
-            height=120
-        )
-        
-        # 更新session state
-        st.session_state.persona = persona
-        st.session_state.task = task
-        st.session_state.output_format = output_format
-    
-    # 保存按钮 (跨两列)
-    if st.button("保存所有提示词", use_container_width=True):
-        # 保存到文件
-        if save_prompts():
-            st.success("所有提示词已保存到文件，下次启动应用时会自动加载")
-            
-    # 添加处理流程说明
-    st.info("""
-    **处理流程说明**:
-    1. 如果上传了支持文件，系统将先使用支持文件分析agent分析这些文件，提取经历要点
-    2. 然后系统将使用简历助手agent，综合分析简历素材表和上一步的分析结果，生成最终简历
-    3. 如果没有上传支持文件，系统将直接使用简历助手agent处理简历素材表
-    """)
 
 # 添加系统状态到第三个标签页
 with TAB3:
