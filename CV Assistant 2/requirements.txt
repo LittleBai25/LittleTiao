@@ -13,13 +13,11 @@ langsmith
 langchain-core
 langchain-community
 langchain-anthropic
-langchain-openai
 zhipuai
 beautifulsoup4
 openai
 mcp-client
 websockets
-python-dotenv
 mcp
 python-dotenv
 aiohttp
