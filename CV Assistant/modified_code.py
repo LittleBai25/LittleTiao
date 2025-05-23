@@ -246,6 +246,12 @@ def get_model_list():
     else:
         return ["qwen/qwen-max", "deepseek/deepseek-chat-v3-0324:free", "qwen-turbo", "其它模型..."]
 
+# 在get_model_list()函数定义之后初始化模型选择变量
+if "selected_support_analyst_model" not in st.session_state:
+    st.session_state.selected_support_analyst_model = get_model_list()[0]
+if "selected_cv_assistant_model" not in st.session_state:
+    st.session_state.selected_cv_assistant_model = get_model_list()[0]
+
 # 保存提示词到文件
 def save_prompts():
     prompts = {
@@ -265,6 +271,10 @@ def save_prompts():
 
 # 加载保存的提示词
 def load_prompts():
+    # 禁用加载保存的提示词，直接使用代码中定义的提示词
+    return False
+    # 以下代码被注释掉，不再从文件加载提示词
+    """
     try:
         if os.path.exists("prompts/saved_prompts.json"):
             with open("prompts/saved_prompts.json", "r", encoding="utf-8") as f:
@@ -281,6 +291,7 @@ def load_prompts():
     except Exception as e:
         st.error(f"加载提示词失败: {str(e)}")
         return False
+    """
 
 # 读取文件内容函数
 def read_file(file):
@@ -480,6 +491,9 @@ with TAB1:
                     content = read_file(f)
                     support_files_content.append(content)
             st.session_state.support_files_content = support_files_content
+            
+            # 打印当前使用的提示词内容，用于调试
+            st.text(f"当前使用的任务提示词长度: {len(st.session_state.task)} 字符")
             
             # 处理并显示结果
             process_with_model(
