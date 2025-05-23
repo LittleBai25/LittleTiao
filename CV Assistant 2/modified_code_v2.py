@@ -727,18 +727,9 @@ def process_with_model(support_analyst_model, cv_assistant_model, resume_content
             
             # 添加生成简历选项
             st.markdown("### 生成最终简历")
-            # 使用模型选择器
-            model_list = get_model_list()
-            resume_model = st.selectbox(
-                "选择简历生成模型",
-                model_list,
-                index=model_list.index(cv_assistant_model),
-                key="resume_generator_model"
-            )
             
             # 添加"生成简历"按钮
             if st.button("生成简历", key="generate_resume_button", use_container_width=True):
-                st.session_state.resume_generator_model = resume_model
                 st.session_state.show_resume_generation = True
         
         # 如果点击了"生成简历"按钮，显示最终简历
@@ -863,26 +854,6 @@ TAB1, TAB2, TAB3 = st.tabs(["文件上传与分析", "提示词调试", "系统�
 with TAB1:
     st.header("上传你的简历素材和支持文件")
     
-    # 添加模型选择下拉框（移到开始分析按钮前）
-    model_list = get_model_list()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        support_analyst_model = st.selectbox(
-            "选择支持文件分析模型",
-            model_list,
-            index=model_list.index(st.session_state.get("selected_support_analyst_model", model_list[0]))
-        )
-        st.session_state.selected_support_analyst_model = support_analyst_model
-    
-    with col2:
-        cv_assistant_model = st.selectbox(
-            "选择简历顾问模型",
-            model_list,
-            index=model_list.index(st.session_state.get("selected_cv_assistant_model", model_list[0]))
-        )
-        st.session_state.selected_cv_assistant_model = cv_assistant_model
-        
     resume_file = st.file_uploader("个人简历素材表（单选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=False)
     support_files = st.file_uploader("支持文件（可多选）", type=["pdf", "docx", "doc", "png", "jpg", "jpeg"], accept_multiple_files=True)
     
@@ -929,100 +900,132 @@ with TAB1:
 with TAB2:
     st.header("提示词调试")
     
-    # 创建三个标签页，分别对应三个agent
-    agent_tabs = st.tabs(["支持文件分析专家", "简历顾问", "简历生成器"])
+    # 模型选择放在TAB2的开始位置
+    model_list = get_model_list()
+    col1, col2, col3 = st.columns(3)
     
-    # 支持文件分析专家的提示词调试
-    with agent_tabs[0]:
-        st.subheader("支持文件分析专家提示词")
-        
+    with col1:
+        support_analyst_model = st.selectbox(
+            "支持文件分析模型",
+            model_list,
+            index=model_list.index(st.session_state.get("selected_support_analyst_model", model_list[0])),
+            key="support_analyst_model_select"
+        )
+        st.session_state.selected_support_analyst_model = support_analyst_model
+    
+    with col2:
+        cv_assistant_model = st.selectbox(
+            "简历顾问模型",
+            model_list,
+            index=model_list.index(st.session_state.get("selected_cv_assistant_model", model_list[0])),
+            key="cv_assistant_model_select"
+        )
+        st.session_state.selected_cv_assistant_model = cv_assistant_model
+    
+    with col3:
+        resume_generator_model = st.selectbox(
+            "简历生成模型",
+            model_list,
+            index=model_list.index(st.session_state.get("resume_generator_model", model_list[0])),
+            key="resume_generator_model_select"
+        )
+        st.session_state.resume_generator_model = resume_generator_model
+    
+    # 使用简单的扩展/折叠（expander）来取代标签页
+    # 1. 支持文件分析专家提示词
+    with st.expander("支持文件分析专家提示词", expanded=False):
         # 人物设定
         support_analyst_persona = st.text_area(
             "人物设定", 
             value=st.session_state.support_analyst_persona,
-            height=150
+            height=150,
+            key="support_analyst_persona_area"
         )
         
         # 任务描述
         support_analyst_task = st.text_area(
             "任务描述", 
             value=st.session_state.support_analyst_task,
-            height=300
+            height=200,
+            key="support_analyst_task_area"
         )
         
         # 输出格式
         support_analyst_output_format = st.text_area(
             "输出格式", 
             value=st.session_state.support_analyst_output_format,
-            height=400
+            height=300,
+            key="support_analyst_output_format_area"
         )
         
         # 保存按钮
-        if st.button("保存支持文件分析专家提示词", use_container_width=True):
+        if st.button("保存支持文件分析专家提示词", use_container_width=True, key="save_support_analyst"):
             st.session_state.support_analyst_persona = support_analyst_persona
             st.session_state.support_analyst_task = support_analyst_task
             st.session_state.support_analyst_output_format = support_analyst_output_format
             st.success("支持文件分析专家提示词已保存！")
     
-    # 简历顾问的提示词调试
-    with agent_tabs[1]:
-        st.subheader("简历顾问提示词")
-        
+    # 2. 简历顾问提示词
+    with st.expander("简历顾问提示词", expanded=False):
         # 人物设定
         persona = st.text_area(
             "人物设定", 
             value=st.session_state.persona,
-            height=150
+            height=150,
+            key="persona_area"
         )
         
         # 任务描述
         task = st.text_area(
             "任务描述", 
             value=st.session_state.task,
-            height=300
+            height=200,
+            key="task_area"
         )
         
         # 输出格式
         output_format = st.text_area(
             "输出格式", 
             value=st.session_state.output_format,
-            height=400
+            height=300,
+            key="output_format_area"
         )
         
         # 保存按钮
-        if st.button("保存简历顾问提示词", use_container_width=True):
+        if st.button("保存简历顾问提示词", use_container_width=True, key="save_cv_assistant"):
             st.session_state.persona = persona
             st.session_state.task = task
             st.session_state.output_format = output_format
             st.success("简历顾问提示词已保存！")
     
-    # 简历生成器的提示词调试
-    with agent_tabs[2]:
-        st.subheader("简历生成器提示词")
-        
+    # 3. 简历生成器提示词
+    with st.expander("简历生成器提示词", expanded=False):
         # 人物设定
         resume_generator_persona = st.text_area(
             "人物设定", 
             value=st.session_state.resume_generator_persona,
-            height=150
+            height=150,
+            key="resume_generator_persona_area"
         )
         
         # 任务描述
         resume_generator_task = st.text_area(
             "任务描述", 
             value=st.session_state.resume_generator_task,
-            height=300
+            height=200,
+            key="resume_generator_task_area"
         )
         
         # 输出格式
         resume_generator_output_format = st.text_area(
             "输出格式", 
             value=st.session_state.resume_generator_output_format,
-            height=400
+            height=300,
+            key="resume_generator_output_format_area"
         )
         
         # 保存按钮
-        if st.button("保存简历生成器提示词", use_container_width=True):
+        if st.button("保存简历生成器提示词", use_container_width=True, key="save_resume_generator"):
             st.session_state.resume_generator_persona = resume_generator_persona
             st.session_state.resume_generator_task = resume_generator_task
             st.session_state.resume_generator_output_format = resume_generator_output_format
