@@ -447,9 +447,9 @@ class TranscriptAnalyzer:
             # 简化素材表 Chain
             simplifier_prompt = ChatPromptTemplate.from_messages([
                 ("system", f"{self.prompt_templates.get_template('material_simplifier_role')}\n\n"
-                        f"任务:\n{self.prompt_templates.get_template('material_simplifier_tesk')}\n\n"
+                        f"任务:\n{self.prompt_templates.get_template('material_simplifier_task')}\n\n"
                         f"请按照以下格式输出:\n{self.prompt_templates.get_template('material_simplifier_output')}"),
-                ("human", "素材表document_content：\n{document_content}")
+                ("human", "素材表document_content：\n{document_content}\n\n申请方向school_plan：\n{school_plan}\n\n定制需求custom_requirements：\n{custom_requirements}")
             ])
             
             self.simplifier_chain = LLMChain(
@@ -459,7 +459,7 @@ class TranscriptAnalyzer:
                 verbose=True
             )
     
-    def simplify_materials(self, document_content: str) -> Dict[str, Any]:
+    def simplify_materials(self, document_content: str, school_plan: str = "", custom_requirements: str = "") -> Dict[str, Any]:
         """简化素材表内容"""
         try:
             # 创建一个队列用于流式输出
@@ -490,7 +490,9 @@ class TranscriptAnalyzer:
                 try:
                     result = self.simplifier_chain(
                         {
-                            "document_content": document_content
+                            "document_content": document_content,
+                            "school_plan": school_plan,
+                            "custom_requirements": custom_requirements
                         },
                         callbacks=[QueueCallbackHandler(message_queue)]
                     )
@@ -933,8 +935,14 @@ def main():
         
         simplifier_model = st.selectbox(
             "选择简化模型",
-            ["qwen/qwq-32b:free","qwen/qwq-32b","google/gemini-2.5-pro-exp-03-25:free", "deepseek/deepseek-chat-v3-0324:free", "deepseek/deepseek-r1:free","deepseek/deepseek-r1","anthropic/claude-3.7-sonnet"],
-            index=["qwen/qwq-32b:free","qwen/qwq-32b","google/gemini-2.5-pro-exp-03-25:free", "deepseek/deepseek-chat-v3-0324:free", "deepseek/deepseek-r1:free","deepseek/deepseek-r1","anthropic/claude-3.7-sonnet"].index(st.session_state.simplifier_model)
+            [
+                "google/gemini-2.5-flash-preview-05-20",
+                "google/gemini-2.5-flash-preview-05-20:thinking"
+            ],
+            index=[
+                "google/gemini-2.5-flash-preview-05-20",
+                "google/gemini-2.5-flash-preview-05-20:thinking"
+            ].index(st.session_state.simplifier_model)
         )
         if simplifier_model != st.session_state.simplifier_model:
             st.session_state.simplifier_model = simplifier_model
@@ -1124,7 +1132,9 @@ def main():
                         with st.spinner("正在简化素材表..."):
                             # 处理成绩单分析
                             result = transcript_analyzer.simplify_materials(
-                                st.session_state.document_content
+                                st.session_state.document_content,
+                                school_plan=school_plan,
+                                custom_requirements=custom_requirements
                             )
                             
                             if result["status"] == "success":
