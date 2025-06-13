@@ -950,11 +950,16 @@ def main():
             
     with col3:
         if 'content_model' not in st.session_state:
-            st.session_state.content_model = st.secrets["CONTENT_MODEL"]
+            st.session_state.content_model = "anthropic/claude-sonnet-4"
+        content_model_options = [
+            "anthropic/claude-sonnet-4",
+            "anthropic/claude-3.7-sonnet",
+            "google/gemini-2.5-flash-preview-05-20"
+        ]
         content_model = st.selectbox(
             "选择内容规划模型",
-            ["qwen/qwq-32b:free","qwen/qwq-32b","google/gemini-2.5-pro-exp-03-25:free", "deepseek/deepseek-chat-v3-0324:free", "deepseek/deepseek-r1:free","deepseek/deepseek-r1","anthropic/claude-3.7-sonnet"],
-            index=["qwen/qwq-32b:free","qwen/qwq-32b","google/gemini-2.5-pro-exp-03-25:free", "deepseek/deepseek-chat-v3-0324:free", "deepseek/deepseek-r1:free","deepseek/deepseek-r1","anthropic/claude-3.7-sonnet"].index(st.session_state.content_model)
+            content_model_options,
+            index=content_model_options.index(st.session_state.content_model)
         )
         if content_model != st.session_state.content_model:
             st.session_state.content_model = content_model
