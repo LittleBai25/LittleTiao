@@ -1051,6 +1051,23 @@ def main():
     if 'simplifier_result' not in st.session_state:
         st.session_state.simplifier_result = None
     
+    # 先定义申请方向和定制需求，确保后续任何地方都能用
+    st.markdown("申请方向 <span style='color: red'>*</span>", unsafe_allow_html=True)
+    school_plan = st.text_area(
+        "",  # 标签设为空，因为我们已经用markdown显示了标签
+        value="请输入申请方向，此为必填项",
+        height=100,
+        help="请输入已确定的申请方向"
+    )
+    
+    # 添加自定义需求输入框
+    custom_requirements = st.text_area(
+        "定制需求（可选）",
+        value="无定制需求",
+        height=100,
+        help="请输入特殊的定制需求，如果没有可以保持默认值"
+    )
+    
     with tab1:
         transcript_file = st.file_uploader("上传成绩单（可选）", type=['pdf'])
         # 自动检查文件状态并清除相关内存或自动开始分析
@@ -1152,23 +1169,6 @@ def main():
                         # 如果已经完成，直接显示结果
                         st.markdown(st.session_state.simplifier_result)
                         st.success("✅ 简化素材表完成！")
-        # 修改申请方向部分
-        st.markdown("申请方向 <span style='color: red'>*</span>", unsafe_allow_html=True)
-        school_plan = st.text_area(
-            "",  # 标签设为空，因为我们已经用markdown显示了标签
-            value="请输入申请方向，此为必填项",
-            height=100,
-            help="请输入已确定的申请方向"
-        )
-        
-        # 添加自定义需求输入框
-        custom_requirements = st.text_area(
-            "定制需求（可选）",
-            value="无定制需求",
-            height=100,
-            help="请输入特殊的定制需求，如果没有可以保持默认值"
-        )
-        
         # 修改按钮区域，只保留单文件模式
         button_col1, button_col2 = st.columns(2)
         
