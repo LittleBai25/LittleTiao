@@ -937,11 +937,13 @@ def main():
             "选择简化模型",
             [
                 "google/gemini-2.5-flash-preview-05-20",
-                "google/gemini-2.5-flash-preview-05-20:thinking"
+                "google/gemini-2.5-flash-preview-05-20:thinking",
+                "deepseek/deepseek-chat-v3-0324"
             ],
             index=[
                 "google/gemini-2.5-flash-preview-05-20",
-                "google/gemini-2.5-flash-preview-05-20:thinking"
+                "google/gemini-2.5-flash-preview-05-20:thinking",
+                "deepseek/deepseek-chat-v3-0324"
             ].index(st.session_state.simplifier_model)
         )
         if simplifier_model != st.session_state.simplifier_model:
