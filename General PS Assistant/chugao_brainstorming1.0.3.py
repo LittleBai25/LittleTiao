@@ -954,7 +954,8 @@ def main():
         content_model_options = [
             "anthropic/claude-sonnet-4",
             "anthropic/claude-3.7-sonnet",
-            "google/gemini-2.5-flash-preview-05-20"
+            "google/gemini-2.5-flash-preview-05-20",
+            "google/gemini-2.5-flash-preview-05-20:thinking"
         ]
         content_model = st.selectbox(
             "选择内容规划模型",
