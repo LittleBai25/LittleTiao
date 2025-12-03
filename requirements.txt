@@ -28,4 +28,3 @@ openpyxl
 xlsxwriter
 pysqlite3-binary
 pymupdf
-tiktoken==0.8.0
